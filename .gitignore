@@ -1,0 +1,29 @@
+# Build output
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+*.dll
+*.pdb
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Secrets / local config
+appsettings.json
+appsettings.*.local.json
+*.env
+.env
+
+# Logs & test output
+*.log
+TestResults/
+[Tt]est[Rr]esult*/
