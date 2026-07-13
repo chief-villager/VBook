@@ -10,3 +10,5 @@ namespace Bookkeeping.Infrastructure.Auth;
 public sealed class ApplicationUser : IdentityUser<Guid>
 {
 }
+
+ 

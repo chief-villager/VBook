@@ -1,6 +1,7 @@
 using Bookkeeping.Application.Abstractions;
 using Bookkeeping.Application.CreditReadiness;
 using Bookkeeping.Application.Identity;
+using Bookkeeping.Application.Invoices;
 using Bookkeeping.Application.Ledger;
 using Bookkeeping.Application.Reporting;
 using Bookkeeping.Application.Transactions;
@@ -63,5 +64,14 @@ public static class ModuleRegistration
     {
         services.AddScoped<ICreditReadinessService, CreditReadinessService>();
         return services;
+    }
+
+    public static IServiceCollection AddInvoiceModule(this IServiceCollection services)
+    {
+        
+        services.AddScoped<IInvoiceRepository, InvoiceRepository>();
+        services.AddScoped<IInvoiceService, InvoiceService>();
+        return services;
+
     }
 }

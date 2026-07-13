@@ -36,3 +36,12 @@ public readonly record struct JournalEntryId(Guid Value)
     public static JournalEntryId New() => new(Guid.NewGuid());
     public override string ToString() => Value.ToString();
 }
+
+public readonly record struct InvoiceId(Guid Value)
+{
+    public static InvoiceId New() => new(Guid.NewGuid());
+    public override string ToString()
+    {
+        return Value.ToString();
+    }
+}

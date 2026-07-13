@@ -12,6 +12,11 @@ public sealed class IdentityRepository : GenericRepository<Business>, IIdentityR
     public Task<Business?> GetBusinessAsync(BusinessId id, CancellationToken ct = default)
         => Set.FirstOrDefaultAsync(b => b.Id == id, ct);
 
+    // The invoice template belongs to the Business aggregate (shared PK on BusinessId);
+    // a business may not have one yet, so this can return null.
+    public Task<InvoiceTemplate?> GetBusinessInvoiceTemplateAsync(BusinessId id, CancellationToken ct = default)
+        => Context.Set<InvoiceTemplate>().FirstOrDefaultAsync(t => t.BusinessId == id, ct);
+
     public Task<User?> GetUserAsync(UserId id, CancellationToken ct = default)
         => Context.Set<User>().FirstOrDefaultAsync(u => u.Id == id, ct);
 

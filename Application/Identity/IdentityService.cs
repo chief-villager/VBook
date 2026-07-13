@@ -73,4 +73,29 @@ public sealed class IdentityService : IIdentityService
             ? Result.Success()
             : Result.Failure("User does not own this business.");
     }
+
+    public async Task<Result> SetInvoiceTemplateAsync(BusinessId businessId, string logoUrl,
+    string businessName, string accountNumber, string bankName, string terms,
+    CancellationToken ct = default)
+    {
+        var business = await _repository.GetBusinessAsync(businessId, ct);
+        if (business is null)
+            return Result.Failure("Business not found.");
+
+        var result = business.SetTemplate(logoUrl, businessName, accountNumber, bankName, terms);
+        if (result.IsFailure)
+            return result;
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return Result.Success();
+    }
+
+    public async Task<Result<InvoiceTemplateDto>> GetInvoiceTemplateAsync(BusinessId businessId, CancellationToken ct = default)
+    {
+        var template = await _repository.GetBusinessInvoiceTemplateAsync(businessId, ct);
+        return template is null
+            ? Result<InvoiceTemplateDto>.Failure("Invoice template not found.")
+            : new InvoiceTemplateDto(template.BusinessId, template.LogoUrl, template.BusinessName,
+                template.AccountNumber, template.BankName, template.Terms);
+    }
 }

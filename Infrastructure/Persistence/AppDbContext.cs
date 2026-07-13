@@ -2,6 +2,7 @@ using Bookkeeping.Application.Abstractions;
 using Bookkeeping.Application.Common;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Identity;
+using Bookkeeping.Domain.Invoices;
 using Bookkeeping.Domain.Ledger;
 using Bookkeeping.Domain.Transactions;
 using Bookkeeping.Infrastructure.Auth;
@@ -38,6 +39,7 @@ public sealed class AppDbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
+    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
@@ -47,6 +49,7 @@ public sealed class AppDbContext
         builder.Properties<CategoryId>().HaveConversion<CategoryIdConverter>();
         builder.Properties<AccountId>().HaveConversion<AccountIdConverter>();
         builder.Properties<JournalEntryId>().HaveConversion<JournalEntryIdConverter>();
+        builder.Properties<InvoiceId>().HaveConversion<InvoiceIdConverter>();
         builder.Properties<decimal>().HavePrecision(18, 2);
     }
 

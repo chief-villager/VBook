@@ -7,6 +7,7 @@ namespace Bookkeeping.Application.Identity;
 public interface IIdentityRepository : IGenericRepository<Business>
 {
     Task<Business?> GetBusinessAsync(BusinessId id, CancellationToken ct = default);
+    Task<InvoiceTemplate?> GetBusinessInvoiceTemplateAsync(BusinessId id, CancellationToken ct = default);
     Task<User?> GetUserAsync(UserId id, CancellationToken ct = default);
     Task AddUserAsync(User user, CancellationToken ct = default);
 }
