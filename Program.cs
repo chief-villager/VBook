@@ -1,15 +1,24 @@
 using System.Text;
+using Bookkeeping.Domain.Invoices;
 using Bookkeeping.Infrastructure.DependencyInjection;
+using Bookkeeping.Infrastructure.Documents;
 using Bookkeeping.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using QuestPDF.Infrastructure;
+
+// QuestPDF is free under the Community license for this use.
+QuestPDF.Settings.License = LicenseType.Community;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Used to fetch invoice-template logos for PDF rendering.
+builder.Services.AddHttpClient();
 
 // JWT bearer auth. Tokens are issued by JwtTokenIssuer using the same Jwt settings.
 var jwt = builder.Configuration.GetSection("Jwt");
@@ -38,7 +47,7 @@ builder.Services
     .AddLedgerModule()
     .AddReportingModule()
     .AddCreditReadinessModule()
-    .AddInvoiceModule();
+    .AddInvoiceModule(builder.Configuration);
 
 var app = builder.Build();
 

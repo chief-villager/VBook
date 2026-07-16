@@ -5,8 +5,10 @@ using Bookkeeping.Application.Invoices;
 using Bookkeeping.Application.Ledger;
 using Bookkeeping.Application.Reporting;
 using Bookkeeping.Application.Transactions;
+using Bookkeeping.Domain.Invoices.Events;
 using Bookkeeping.Domain.Transactions.Events;
 using Bookkeeping.Infrastructure.Auth;
+using Bookkeeping.Infrastructure.Documents;
 using Bookkeeping.Infrastructure.Persistence;
 using Bookkeeping.Infrastructure.Persistence.Repositories;
 using Microsoft.AspNetCore.Identity;
@@ -66,12 +68,22 @@ public static class ModuleRegistration
         return services;
     }
 
-    public static IServiceCollection AddInvoiceModule(this IServiceCollection services)
+    public static IServiceCollection AddInvoiceModule(this IServiceCollection services, IConfiguration configuration)
     {
-        
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
         services.AddScoped<IInvoiceService, InvoiceService>();
-        return services;
+        services.AddScoped<IInvoicePdfJobRepository, InvoicePdfJobRepository>();
 
+        // Creating an invoice stages a PDF job in the same transaction (outbox).
+        services.AddScoped<IDomainEventHandler<InvoiceCreated>, InvoiceCreatedHandler>();
+
+        // Stateless and thread-safe: one instance serves every request.
+        services.AddSingleton<IInvoicePdfGenerator, InvoicePdfGenerator>();
+
+        // R2 storage + the background worker that drains the PDF outbox out of band.
+        services.Configure<R2Options>(configuration.GetSection("R2"));
+        services.AddSingleton<IInvoiceDocumentStore, R2InvoiceDocumentStore>();
+        services.AddHostedService<InvoicePdfOutboxProcessor>();
+        return services;
     }
 }

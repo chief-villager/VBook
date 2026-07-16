@@ -1,4 +1,5 @@
 using Bookkeeping.Domain.Common;
+using Bookkeeping.Domain.Invoices.Events;
 
 namespace Bookkeeping.Domain.Invoices;
 
@@ -13,6 +14,9 @@ public sealed class Invoice : AggregateRoot<InvoiceId>
     public string BillTo { get; private set; } = string.Empty;
     public InvoiceStatus Status { get; private set; }
     public decimal VatRate { get; private set; } = 0.075m;
+
+    // Set once the PDF has been rendered and stored; null until then.
+    public string? PdfUrl { get; private set; }
 
     public IReadOnlyList<InvoiceLineItem> LineItems => _lineItems;
 
@@ -35,7 +39,14 @@ public sealed class Invoice : AggregateRoot<InvoiceId>
         VatRate = vatRate;
         Status = InvoiceStatus.Pending;
         _lineItems.AddRange(lineItems);
+
+        // Kicks off out-of-band PDF generation via the outbox (see InvoiceCreated).
+        Raise(new InvoiceCreated(Id, businessId));
     }
+
+    // The single write path for the stored PDF link; called by the outbox processor
+    // once the document is generated and uploaded.
+    public void AttachPdf(string url) => PdfUrl = url;
 
     public static Result<Invoice> Create(BusinessId businessId, string invoiceNumber, DateOnly issueDate,
         DateOnly dueDate, string billTo, decimal vatRate, IEnumerable<InvoiceLineItem> lineItems)

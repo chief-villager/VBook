@@ -30,6 +30,7 @@ public sealed class InvoiceService : IInvoiceService
             return Result<InvoiceId>.Failure(result.Error);
 
         await _repository.AddAsync(result.Value, ct);
+        
         await _unitOfWork.SaveChangesAsync(ct);
         return result.Value.Id;
     }
