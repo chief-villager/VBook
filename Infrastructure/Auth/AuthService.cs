@@ -8,11 +8,13 @@ public sealed class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly ITokenIssuer _tokens;
+    private readonly IIdentityRepository _identity;
 
-    public AuthService(UserManager<ApplicationUser> users, ITokenIssuer tokens)
+    public AuthService(UserManager<ApplicationUser> users, ITokenIssuer tokens, IIdentityRepository identity)
     {
         _users = users;
         _tokens = tokens;
+        _identity = identity;
     }
 
     public async Task<Result> CreateCredentialsAsync(UserId userId, string email, string password, CancellationToken ct = default)
@@ -34,6 +36,13 @@ public sealed class AuthService : IAuthService
         if (principal is null || !await _users.CheckPasswordAsync(principal, password))
             return Result<string>.Failure("Invalid credentials.");
 
-        return _tokens.Issue(principal.Id, principal.Email!);
+        // Stamp each business role the user holds into the token so authorization can
+        // scope decisions per business (the shared Guid links principal to domain user).
+        var memberships = await _identity.ListMembershipsForUserAsync(new UserId(principal.Id), ct);
+        var roles = memberships
+            .Select(m => new BusinessRoleAssignment(m.BusinessId.Value, m.Role.ToString()))
+            .ToList();
+
+        return _tokens.Issue(principal.Id, principal.Email!, roles);
     }
 }

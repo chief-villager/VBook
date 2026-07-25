@@ -28,7 +28,10 @@ DOTNET_ROLL_FORWARD=Major dotnet ef dbcontext info   # validate the EF model bui
 ```
 
 - The schema is created at startup via `db.Database.EnsureCreated()` in
-  `Program.cs` (no EF migrations in the repo).
+  `Program.cs`. A `Migrations/` folder exists (and `AppDbContextFactory` makes
+  `dotnet ef migrations add <Name>` work), but **startup still uses `EnsureCreated`,
+  not `Migrate`** — the migrations are not applied automatically and the two paths
+  are not reconciled.
 - **After any schema change, drop the dev database** so `EnsureCreated` rebuilds
   it with the seed data — `EnsureCreated` does not migrate an existing database.
 
@@ -43,18 +46,24 @@ Layered, dependency arrow points inward: **Api → Application → Domain**, wit
   **Kept free of EF Core** (persistence is an interface concern).
 - `Infrastructure/` — EF Core `AppDbContext`, configurations, repositories, the
   domain-event dispatcher, DI registration.
-- `Api/` — minimal-API endpoint definitions (`Api/Endpoints/*`).
+- `Api/` — MVC controllers (`Api/Controllers/*`), one per module, mapped via
+  `app.MapControllers()`. (The README still describes the older `Api/Endpoints/*`
+  minimal-API layout — that has been migrated to controllers.)
 
 ### Modules (bounded contexts)
 
-`Identity`, `Transactions`, `Ledger`, `Reporting`, `CreditReadiness`. Each
-registers its own repository/service/handlers via an `AddXModule()` extension in
-`Infrastructure/DependencyInjection/ModuleRegistration.cs`, chained in `Program.cs`.
+`Identity`, `Transactions`, `Ledger`, `Reporting`, `CreditReadiness`, `Invoices`.
+Each registers its own repository/service/handlers via an `AddXModule()` extension
+in `Infrastructure/DependencyInjection/ModuleRegistration.cs`, chained in `Program.cs`.
+Two modules carry infrastructure integrations: `Transactions` owns the Mono
+bank-feed adapter, and `Invoices` owns PDF generation + object storage (see below).
 
 Cross-module references are **plain id values with no FK constraint**; integrity
 across modules is enforced in the application, not the database. The single
 `AppDbContext` uses **one schema per module** (`identity`, `transactions`,
-`ledger`) to keep boundaries visible at the data layer.
+`ledger`, `invoices`, plus `auth` for ASP.NET Core Identity tables) to keep
+boundaries visible at the data layer. Note `invoice_templates` lives in the
+`identity` schema even though invoicing is its own module.
 
 ## Key patterns
 
@@ -75,6 +84,33 @@ across modules is enforced in the application, not the database. The single
   `AppDbContext.ConfigureConventions`.
 - **Repository + Unit of Work** — `IUnitOfWork` is the `AppDbContext`; calling
   `SaveChangesAsync` is the single save/commit point (and the event-dispatch trigger).
+- **Ports & adapters for external services** — `Application/` defines a
+  provider-neutral port; `Infrastructure/` holds the vendor adapter, so vendor
+  types never leak upward:
+  - `IBankFeedProvider` (`Application/Abstractions`) → `MonoBankFeedProvider` +
+    `MonoApiClient` (`Infrastructure/Mono`). The `MonoApiClient` `HttpClient` is
+    configured with `AddStandardResilienceHandler` (retry + circuit breaker +
+    timeout). Mono amounts are in **kobo (minor units)**; the adapter divides by
+    100 to reach the `Money` value object. `MonoOptions` is bound + `ValidateOnStart`.
+  - `IInvoiceDocumentStore` → `R2InvoiceDocumentStore` (Cloudflare R2 over the
+    S3-compatible API via `AWSSDK.S3`); `IInvoicePdfGenerator` → `InvoicePdfGenerator`
+    (QuestPDF, whose Community license is set in `Program.cs`).
+  - `ITokenIssuer` → `JwtTokenIssuer` (`Infrastructure/Auth`).
+- **Outbox + background processing (invoice PDFs)** — creating an invoice raises
+  `InvoiceCreated`; `InvoiceCreatedHandler` stages an `InvoicePdfJob` (the
+  `invoices.pdf_jobs` table) in the **same** transaction and does no I/O. The
+  hosted `InvoicePdfOutboxProcessor` (`Infrastructure/Documents`) drains the queue
+  out of band, each iteration in its own DI scope / fresh `AppDbContext`: it renders
+  the PDF, uploads to R2, and writes the URL back **through the `Invoice` aggregate**
+  (`AttachPdf`) so the aggregate stays the sole writer of `PdfUrl`. This keeps
+  external I/O out of the request path.
+- **Authentication** — JWT bearer is wired in `Program.cs` (validated against the
+  `Jwt` config section), backed by ASP.NET Core Identity (`ApplicationUser`, `auth`
+  schema). `BookkeepingUserStore` disables the store's auto-save so credential
+  creation **joins the caller's unit of work** rather than committing on its own —
+  the domain user and its credentials commit together, linked by a shared `Guid`
+  id (no FK). See the caveat under Known gaps: issuing/validating tokens works, but
+  endpoints are not yet actually protected.
 
 ## Reference data: chart of accounts & categories
 
@@ -92,12 +128,18 @@ identical for every business. Per-business customization is **out of scope**.
 
 ## Known gaps / not implemented
 
-- **No authentication or authorization.** No ASP.NET Core Identity, no auth
-  middleware, no login/passwords. Endpoints are anonymous and trust the
-  `businessId`/`ownerId` passed in the route/body. `IdentityService.EnsureOwnershipAsync`
-  exists but is **not called anywhere** — the enforcement seam is empty.
+- **Authentication exists, but enforcement does not.** JWT issuance/validation and
+  ASP.NET Core Identity are wired up, but **no controller carries `[Authorize]`** and
+  `IdentityService.EnsureOwnershipAsync` is still **not called anywhere**. Endpoints
+  remain effectively anonymous and trust the `businessId`/`ownerId` in the route/body.
+- **Bank feed is mid-implementation** (branch `bankfeed-implementation`). The Mono
+  adapter, DI wiring, and webhook controller (`MonoWebhookController`, secret-header
+  auth, no HMAC) exist, but `IBankFeedProvider` is only **injected** into
+  `TransactionService` — no import-into-ledger flow consumes it yet. The Mono config
+  section is not present in `appsettings.example.json`.
 - **No account/category editing endpoints** (consistent with reference-data scope).
-- **No EF migrations** — `EnsureCreated` only (dev convenience).
+- **Migrations exist but are not applied at startup** — `Program.cs` uses
+  `EnsureCreated`, not `Migrate` (see Runtime & tooling).
 
 ## Conventions
 

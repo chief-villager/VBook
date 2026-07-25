@@ -49,10 +49,97 @@ public sealed class IdentityService : IIdentityService
         var business = Business.Register(ownerId, name.Trim(), sector);
         await _repository.AddAsync(business, ct);
 
-        // Saving dispatches BusinessRegistered: the Ledger seeds the chart of accounts
-        // and Transactions seeds default categories, all inside this one transaction.
+        // Every business has exactly one owner membership; the registering user gets it.
+        var membership = BusinessMembership.Create(business.Id, ownerId, BusinessRole.Owner);
+        await _repository.AddMembershipAsync(membership, ct);
+
         await _unitOfWork.SaveChangesAsync(ct);
         return business.Id;
+    }
+
+    public async Task<Result<BusinessRegistrationResult>> RegisterBusinessWithOwnerAsync(
+        string email, string displayName, string password,
+        string businessName, BusinessSector sector, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(email))
+            return Result<BusinessRegistrationResult>.Failure("Email is required.");
+        if (string.IsNullOrWhiteSpace(businessName))
+            return Result<BusinessRegistrationResult>.Failure("Business name is required.");
+
+        var existing = await _repository.GetUserByEmailAsync(email.Trim(), ct);
+        if (existing is not null)
+            return Result<BusinessRegistrationResult>.Failure("A user with this email already exists.");
+
+        // Everything below is staged on one unit of work and committed by a single
+        // SaveChangesAsync — the owner, their credentials, the business, and the owner
+        // membership either all persist or none do.
+        var user = new User(email.Trim(), displayName.Trim());
+        await _repository.AddUserAsync(user, ct);
+
+        var credentials = await _authService.CreateCredentialsAsync(user.Id, user.Email, password, ct);
+        if (credentials.IsFailure)
+            return Result<BusinessRegistrationResult>.Failure(credentials.Error);
+
+        var business = Business.Register(user.Id, businessName.Trim(), sector);
+        await _repository.AddAsync(business, ct);
+
+        var membership = BusinessMembership.Create(business.Id, user.Id, BusinessRole.Owner);
+        await _repository.AddMembershipAsync(membership, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return new BusinessRegistrationResult(user.Id, business.Id);
+    }
+
+    public async Task<Result<UserId>> AddMemberAsync(
+        BusinessId businessId, string email, string displayName, string password,
+        BusinessRole role, CancellationToken ct = default)
+    {
+        if (role == BusinessRole.Owner)
+            return Result<UserId>.Failure("A business already has an owner; assign a different role.");
+        if (string.IsNullOrWhiteSpace(email))
+            return Result<UserId>.Failure("Email is required.");
+
+        var business = await _repository.GetBusinessAsync(businessId, ct);
+        if (business is null)
+            return Result<UserId>.Failure("Business not found.");
+
+        // This flow provisions a brand-new user account for the member. A person who
+        // already has an account is rejected here rather than silently reused.
+        var existing = await _repository.GetUserByEmailAsync(email.Trim(), ct);
+        if (existing is not null)
+            return Result<UserId>.Failure("A user with this email already exists.");
+
+        var user = new User(email.Trim(), displayName.Trim());
+        await _repository.AddUserAsync(user, ct);
+
+        var credentials = await _authService.CreateCredentialsAsync(user.Id, user.Email, password, ct);
+        if (credentials.IsFailure)
+            return Result<UserId>.Failure(credentials.Error);
+
+        var membership = BusinessMembership.Create(businessId, user.Id, role);
+        await _repository.AddMembershipAsync(membership, ct);
+
+        await _unitOfWork.SaveChangesAsync(ct);
+        return user.Id;
+    }
+
+    public async Task<Result<IReadOnlyList<BusinessMemberDto>>> ListMembersAsync(BusinessId businessId, CancellationToken ct = default)
+    {
+        var business = await _repository.GetBusinessAsync(businessId, ct);
+        if (business is null)
+            return Result<IReadOnlyList<BusinessMemberDto>>.Failure("Business not found.");
+
+        var memberships = await _repository.ListMembershipsAsync(businessId, ct);
+
+        var members = new List<BusinessMemberDto>(memberships.Count);
+        foreach (var m in memberships)
+        {
+            var user = await _repository.GetUserAsync(m.UserId, ct);
+            members.Add(new BusinessMemberDto(
+                m.UserId, user?.Email ?? string.Empty, user?.DisplayName ?? string.Empty, m.Role, m.JoinedAt));
+        }
+
+        return members;
     }
 
     public async Task<Result<BusinessContext>> GetBusinessAsync(BusinessId businessId, CancellationToken ct = default)
