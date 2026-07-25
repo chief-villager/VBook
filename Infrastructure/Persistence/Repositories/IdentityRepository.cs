@@ -20,6 +20,27 @@ public sealed class IdentityRepository : GenericRepository<Business>, IIdentityR
     public Task<User?> GetUserAsync(UserId id, CancellationToken ct = default)
         => Context.Set<User>().FirstOrDefaultAsync(u => u.Id == id, ct);
 
+    public Task<User?> GetUserByEmailAsync(string email, CancellationToken ct = default)
+        => Context.Set<User>().FirstOrDefaultAsync(u => u.Email == email, ct);
+
     public async Task AddUserAsync(User user, CancellationToken ct = default)
         => await Context.Set<User>().AddAsync(user, ct);
+
+    public async Task AddMembershipAsync(BusinessMembership membership, CancellationToken ct = default)
+        => await Context.Set<BusinessMembership>().AddAsync(membership, ct);
+
+    public Task<BusinessMembership?> GetMembershipAsync(BusinessId businessId, UserId userId, CancellationToken ct = default)
+        => Context.Set<BusinessMembership>()
+            .FirstOrDefaultAsync(m => m.BusinessId == businessId && m.UserId == userId, ct);
+
+    public async Task<IReadOnlyList<BusinessMembership>> ListMembershipsAsync(BusinessId businessId, CancellationToken ct = default)
+        => await Context.Set<BusinessMembership>()
+            .Where(m => m.BusinessId == businessId)
+            .OrderBy(m => m.JoinedAt)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyList<BusinessMembership>> ListMembershipsForUserAsync(UserId userId, CancellationToken ct = default)
+        => await Context.Set<BusinessMembership>()
+            .Where(m => m.UserId == userId)
+            .ToListAsync(ct);
 }

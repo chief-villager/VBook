@@ -66,3 +66,50 @@ public sealed class TransactionConfiguration : IEntityTypeConfiguration<Transact
         builder.HasIndex(t => new { t.BusinessId, t.OccurredOn });
     }
 }
+
+public sealed class StagedBankTransactionConfiguration : IEntityTypeConfiguration<StagedBankTransaction>
+{
+    public void Configure(EntityTypeBuilder<StagedBankTransaction> builder)
+    {
+        builder.ToTable("staged_bank_transactions", "transactions");
+        builder.HasKey(s => s.Id);
+        builder.Ignore(s => s.DomainEvents);
+
+        builder.Property(s => s.ExternalAccountId).HasMaxLength(128).IsRequired();
+        builder.Property(s => s.ExternalId).HasMaxLength(128).IsRequired();
+        builder.Property(s => s.Amount).HasPrecision(18, 2);
+        builder.Property(s => s.Narration).HasMaxLength(512).IsRequired();
+        builder.Property(s => s.ProviderCategory).HasMaxLength(128);
+        builder.Property(s => s.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.SuggestedType).HasConversion<string>().HasMaxLength(20);
+        builder.Property(s => s.CategoryId).HasConversion(new NullableCategoryIdConverter());
+        builder.Property(s => s.RecordedTransactionId).HasConversion(new NullableTransactionIdConverter());
+
+        // Chosen category is within this module, so a real (nullable) FK is appropriate.
+        builder.HasOne<Category>()
+            .WithMany()
+            .HasForeignKey(s => s.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Dedupe safety net beneath the app-level check: a feed row is staged once per business.
+        builder.HasIndex(s => new { s.BusinessId, s.ExternalId }).IsUnique();
+    }
+}
+
+public sealed class LinkedBankAccountConfiguration : IEntityTypeConfiguration<LinkedBankAccount>
+{
+    public void Configure(EntityTypeBuilder<LinkedBankAccount> builder)
+    {
+        builder.ToTable("linked_bank_accounts", "transactions");
+        builder.HasKey(a => a.Id);
+        builder.Ignore(a => a.DomainEvents);
+
+        builder.Property(a => a.ExternalAccountId).HasMaxLength(128).IsRequired();
+        builder.Property(a => a.InstitutionName).HasMaxLength(128).IsRequired();
+        builder.Property(a => a.AccountNumberMasked).HasMaxLength(64).IsRequired();
+        builder.Property(a => a.Currency).HasMaxLength(3).IsRequired();
+        builder.Property(a => a.Status).HasConversion<string>().HasMaxLength(20);
+
+        builder.HasIndex(a => new { a.BusinessId, a.ExternalAccountId });
+    }
+}

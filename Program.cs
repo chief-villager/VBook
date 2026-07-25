@@ -1,9 +1,12 @@
 using System.Text;
 using Bookkeeping.Domain.Invoices;
+using Bookkeeping.Infrastructure.Auth;
 using Bookkeeping.Infrastructure.DependencyInjection;
 using Bookkeeping.Infrastructure.Documents;
 using Bookkeeping.Infrastructure.Persistence;
+using Bookkeeping.Infrastructure.Persistence.Configurations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using QuestPDF.Infrastructure;
@@ -51,12 +54,20 @@ builder.Services
 
 var app = builder.Build();
 
+
 // Dev convenience: create the schema on startup. Switch to EF migrations for
 // anything beyond local development (see README).
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    var services = scope.ServiceProvider;
+
+    var dbContext = services.GetRequiredService<AppDbContext>();
+    var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
+    var roleManager = services.GetRequiredService<RoleManager<IdentityRole<Guid>>>();
+
+    dbContext.Database.EnsureCreated();
+
+    await IdentitySeeder.SeedAsync(userManager, roleManager);
 }
 
 if (app.Environment.IsDevelopment())

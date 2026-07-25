@@ -35,3 +35,20 @@ public sealed class BusinessConfiguration : IEntityTypeConfiguration<Business>
         builder.HasIndex(b => b.OwnerId);
     }
 }
+
+public sealed class BusinessMembershipConfiguration : IEntityTypeConfiguration<BusinessMembership>
+{
+    public void Configure(EntityTypeBuilder<BusinessMembership> builder)
+    {
+        builder.ToTable("memberships", "identity");
+        builder.HasKey(m => m.Id);
+        builder.Ignore(m => m.DomainEvents);
+
+        // BusinessId and UserId are plain cross-aggregate values (no FK), matching
+        // Business.OwnerId. A user can hold at most one membership per business.
+        builder.Property(m => m.BusinessId).IsRequired();
+        builder.Property(m => m.UserId).IsRequired();
+        builder.Property(m => m.Role).HasConversion<string>().HasMaxLength(30);
+        builder.HasIndex(m => new { m.BusinessId, m.UserId }).IsUnique();
+    }
+}

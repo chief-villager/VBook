@@ -1,6 +1,8 @@
 using Bookkeeping.Application.Identity;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Identity;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
@@ -10,6 +12,9 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
 {
     public sealed record RegisterUserRequest(string Email, string DisplayName, string Password);
     public sealed record RegisterBusinessRequest(Guid OwnerId, string Name, BusinessSector Sector);
+    public sealed record RegisterBusinessWithOwnerRequest(
+        string Email, string DisplayName, string Password, string BusinessName, BusinessSector Sector);
+    public sealed record AddMemberRequest(string Email, string DisplayName, string Password, BusinessRole Role);
     public sealed record LoginRequest(string Email, string Password);
     public sealed record SetInvoiceTemplateRequest(string LogoUrl, string BusinessName,
         string AccountNumber, string BankName, string Terms);
@@ -39,6 +44,37 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
         return result.IsSuccess
             ? Ok(new { businessId = result.Value.Value })
             : BadRequest(new { error = result.Error });
+    }
+
+    // Combined signup: creates the owner and their business in one transaction.
+    [HttpPost("api/businesses/register")]
+    public async Task<IActionResult> RegisterBusinessWithOwner(RegisterBusinessWithOwnerRequest body, CancellationToken ct)
+    {
+        var result = await identity.RegisterBusinessWithOwnerAsync(
+            body.Email, body.DisplayName, body.Password, body.BusinessName, body.Sector, ct);
+        return result.IsSuccess
+            ? Ok(new { ownerId = result.Value.OwnerId.Value, businessId = result.Value.BusinessId.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    // Adds another user to a business with a non-owner role. Only a caller whose role
+    // for this business grants Users.Create (the Owner) is allowed.
+    [Authorize(Policy = Permissions.Users.Create)]
+    [HttpPost("api/businesses/{businessId:guid}/members")]
+    public async Task<IActionResult> AddMember(Guid businessId, AddMemberRequest body, CancellationToken ct)
+    {
+        var result = await identity.AddMemberAsync(
+            new BusinessId(businessId), body.Email, body.DisplayName, body.Password, body.Role, ct);
+        return result.IsSuccess
+            ? Ok(new { userId = result.Value.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    [HttpGet("api/businesses/{businessId:guid}/members")]
+    public async Task<IActionResult> ListMembers(Guid businessId, CancellationToken ct)
+    {
+        var result = await identity.ListMembersAsync(new BusinessId(businessId), ct);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
     [HttpGet("api/businesses/{businessId:guid}")]
