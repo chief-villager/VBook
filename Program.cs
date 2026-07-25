@@ -1,5 +1,4 @@
 using System.Text;
-using Bookkeeping.Api.Endpoints;
 using Bookkeeping.Infrastructure.DependencyInjection;
 using Bookkeeping.Infrastructure.Persistence;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -8,6 +7,7 @@ using Microsoft.IdentityModel.Tokens;
 
 var builder = WebApplication.CreateBuilder(args);
 
+builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -37,7 +37,8 @@ builder.Services
     .AddTransactionsModule()
     .AddLedgerModule()
     .AddReportingModule()
-    .AddCreditReadinessModule();
+    .AddCreditReadinessModule()
+    .AddInvoiceModule();
 
 var app = builder.Build();
 
@@ -58,10 +59,6 @@ if (app.Environment.IsDevelopment())
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapIdentityEndpoints();
-app.MapTransactionEndpoints();
-app.MapLedgerEndpoints();
-app.MapReportingEndpoints();
-app.MapCreditReadinessEndpoints();
+app.MapControllers();
 
 app.Run();

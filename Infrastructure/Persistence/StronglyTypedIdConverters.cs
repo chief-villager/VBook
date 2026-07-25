@@ -1,4 +1,5 @@
 using Bookkeeping.Domain.Common;
+using Bookkeeping.Domain.Invoices;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 namespace Bookkeeping.Infrastructure.Persistence;
@@ -39,4 +40,10 @@ public sealed class AccountIdConverter : ValueConverter<AccountId, Guid>
 public sealed class JournalEntryIdConverter : ValueConverter<JournalEntryId, Guid>
 {
     public JournalEntryIdConverter() : base(id => id.Value, value => new JournalEntryId(value)) { }
+}
+
+public sealed class InvoiceIdConverter : ValueConverter<InvoiceId, Guid>
+{
+    public InvoiceIdConverter() : base(id => id.Value, value => new InvoiceId(value)) { }
+
 }
