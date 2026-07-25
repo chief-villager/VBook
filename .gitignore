@@ -27,3 +27,4 @@ appsettings.*.local.json
 *.log
 TestResults/
 [Tt]est[Rr]esult*/
+appsettings.example.json
