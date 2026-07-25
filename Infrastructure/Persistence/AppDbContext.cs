@@ -40,6 +40,7 @@ public sealed class AppDbContext
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
+    public DbSet<InvoicePdfJob> InvoicePdfJobs => Set<InvoicePdfJob>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder builder)
     {
