@@ -12,18 +12,22 @@ public sealed class JwtTokenIssuer : ITokenIssuer
 
     public JwtTokenIssuer(IConfiguration config) => _config = config;
 
-    public string Issue(Guid userId, string email)
+    public string Issue(Guid userId, string email, IReadOnlyCollection<BusinessRoleAssignment> roles)
     {
         var section = _config.GetSection("Jwt");
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(section["Key"]!));
         var credentials = new SigningCredentials(key, SecurityAlgorithms.HmacSha256);
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(JwtRegisteredClaimNames.Sub, userId.ToString()),
-            new Claim(JwtRegisteredClaimNames.Email, email),
-            new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
+            new(JwtRegisteredClaimNames.Sub, userId.ToString()),
+            new(JwtRegisteredClaimNames.Email, email),
+            new(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
         };
+
+        // One claim per business the user belongs to, carrying that business's role.
+        foreach (var r in roles)
+            claims.Add(new Claim(BookkeepingClaims.BusinessRole, $"{r.BusinessId}:{r.Role}"));
 
         var token = new JwtSecurityToken(
             issuer: section["Issuer"],

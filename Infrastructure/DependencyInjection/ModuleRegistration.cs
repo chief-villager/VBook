@@ -9,9 +9,15 @@ using Bookkeeping.Domain.Invoices.Events;
 using Bookkeeping.Domain.Transactions.Events;
 using Bookkeeping.Infrastructure.Auth;
 using Bookkeeping.Infrastructure.Documents;
+using Bookkeeping.Infrastructure.Mono;
 using Bookkeeping.Infrastructure.Persistence;
+using Bookkeeping.Infrastructure.Persistence.Configurations;
 using Bookkeeping.Infrastructure.Persistence.Repositories;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
+using Microsoft.OpenApi.Writers;
+using Polly;
 
 namespace Bookkeeping.Infrastructure.DependencyInjection;
 
@@ -35,6 +41,13 @@ public static class ModuleRegistration
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
+
+        // Permission-based authorization, scoped per business. The policy provider turns
+        // a permission name used as a policy into a PermissionRequirement, and the handler
+        // decides it against the caller's role for the business on the route.
+        services.AddHttpContextAccessor();
+        services.AddSingleton<IAuthorizationPolicyProvider, PermissionPolicyProvider>();
+        services.AddSingleton<IAuthorizationHandler, PermissionAuthorizationHandler>();
         return services;
     }
 
@@ -42,6 +55,39 @@ public static class ModuleRegistration
     {
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<ITransactionService, TransactionService>();
+
+        // Bank accounts a business has connected through the feed provider.
+        services.AddScoped<ILinkedBankAccountRepository, LinkedBankAccountRepository>();
+        services.AddScoped<IBankAccountService, BankAccountService>();
+
+        // Bank-import review queue: pulls a linked account's feed into a quarantine of
+        // staged rows and promotes approved rows into Transactions.
+        services.AddScoped<IStagedBankTransactionRepository, StagedBankTransactionRepository>();
+        services.AddScoped<IBankImportService, BankImportService>();
+
+        // Mono open-banking client (Transactions:Mono config section), validated at startup.
+        services.AddOptions<MonoOptions>()
+            .BindConfiguration(MonoOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+
+        services.AddHttpClient<MonoApiClient>((sp, http) =>
+            {
+                var mono = sp.GetRequiredService<IOptions<MonoOptions>>().Value;
+                http.BaseAddress = new Uri(mono.BaseUrl);
+                http.DefaultRequestHeaders.Add("mono-sec-key", mono.SecretKey);
+            })
+            .AddStandardResilienceHandler(o =>
+            {
+                // Microsoft.Extensions.Http.Resilience — retry + circuit breaker + timeout
+                o.Retry.MaxRetryAttempts = 3;
+                o.Retry.BackoffType = DelayBackoffType.Exponential;
+                o.Retry.UseJitter = true;
+            });
+
+        // The app depends on IBankFeedProvider; Mono is the concrete adapter behind it.
+        services.AddScoped<IBankFeedProvider, MonoBankFeedProvider>();
+
         return services;
     }
 
@@ -86,4 +132,5 @@ public static class ModuleRegistration
         services.AddHostedService<InvoicePdfOutboxProcessor>();
         return services;
     }
+
 }

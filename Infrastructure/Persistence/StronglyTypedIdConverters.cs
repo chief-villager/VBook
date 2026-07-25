@@ -32,6 +32,28 @@ public sealed class CategoryIdConverter : ValueConverter<CategoryId, Guid>
     public CategoryIdConverter() : base(id => id.Value, value => new CategoryId(value)) { }
 }
 
+public sealed class NullableCategoryIdConverter : ValueConverter<CategoryId?, Guid?>
+{
+    public NullableCategoryIdConverter()
+        : base(id => id == null ? (Guid?)null : id.Value.Value,
+               value => value == null ? (CategoryId?)null : new CategoryId(value.Value)) { }
+}
+
+public sealed class StagedTransactionIdConverter : ValueConverter<StagedTransactionId, Guid>
+{
+    public StagedTransactionIdConverter() : base(id => id.Value, value => new StagedTransactionId(value)) { }
+}
+
+public sealed class LinkedBankAccountIdConverter : ValueConverter<LinkedBankAccountId, Guid>
+{
+    public LinkedBankAccountIdConverter() : base(id => id.Value, value => new LinkedBankAccountId(value)) { }
+}
+
+public sealed class MembershipIdConverter : ValueConverter<MembershipId, Guid>
+{
+    public MembershipIdConverter() : base(id => id.Value, value => new MembershipId(value)) { }
+}
+
 public sealed class AccountIdConverter : ValueConverter<AccountId, Guid>
 {
     public AccountIdConverter() : base(id => id.Value, value => new AccountId(value)) { }

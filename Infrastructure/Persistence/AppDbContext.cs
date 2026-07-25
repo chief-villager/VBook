@@ -35,8 +35,11 @@ public sealed class AppDbContext
     // domain user set is exposed under a distinct name.
     public DbSet<User> DomainUsers => Set<User>();
     public DbSet<Business> Businesses => Set<Business>();
+    public DbSet<BusinessMembership> Memberships => Set<BusinessMembership>();
     public DbSet<Category> Categories => Set<Category>();
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<StagedBankTransaction> StagedBankTransactions => Set<StagedBankTransaction>();
+    public DbSet<LinkedBankAccount> LinkedBankAccounts => Set<LinkedBankAccount>();
     public DbSet<Account> Accounts => Set<Account>();
     public DbSet<JournalEntry> JournalEntries => Set<JournalEntry>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
@@ -48,6 +51,9 @@ public sealed class AppDbContext
         builder.Properties<BusinessId>().HaveConversion<BusinessIdConverter>();
         builder.Properties<TransactionId>().HaveConversion<TransactionIdConverter>();
         builder.Properties<CategoryId>().HaveConversion<CategoryIdConverter>();
+        builder.Properties<StagedTransactionId>().HaveConversion<StagedTransactionIdConverter>();
+        builder.Properties<LinkedBankAccountId>().HaveConversion<LinkedBankAccountIdConverter>();
+        builder.Properties<MembershipId>().HaveConversion<MembershipIdConverter>();
         builder.Properties<AccountId>().HaveConversion<AccountIdConverter>();
         builder.Properties<JournalEntryId>().HaveConversion<JournalEntryIdConverter>();
         builder.Properties<InvoiceId>().HaveConversion<InvoiceIdConverter>();

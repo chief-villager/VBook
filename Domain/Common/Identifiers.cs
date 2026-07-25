@@ -45,3 +45,21 @@ public readonly record struct InvoiceId(Guid Value)
         return Value.ToString();
     }
 }
+
+public readonly record struct StagedTransactionId(Guid Value)
+{
+    public static StagedTransactionId New() => new(Guid.NewGuid());
+    public override string ToString() => Value.ToString();
+}
+
+public readonly record struct LinkedBankAccountId(Guid Value)
+{
+    public static LinkedBankAccountId New() => new(Guid.NewGuid());
+    public override string ToString() => Value.ToString();
+}
+
+public readonly record struct MembershipId(Guid Value)
+{
+    public static MembershipId New() => new(Guid.NewGuid());
+    public override string ToString() => Value.ToString();
+}
