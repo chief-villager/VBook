@@ -9,7 +9,12 @@ project to showcase Domain-Driven Design and a clean, modular architecture. The
 focus is the accounting domain (transactions → balanced journal entries →
 financial statements → credit-readiness), not infrastructure breadth.
 
-Single project, single deployable: `Bookkeeping.Api.csproj`.
+This repo is a **monorepo with two independently deployable apps**: the .NET API
+(`Bookkeeping.Api.csproj`, at the repo root) and a **separate `frontend/` SPA**
+(React + Vite + TypeScript). They share one git history but build and deploy on
+their own pipelines — the API does not build or serve the SPA. The SPA talks to
+the API over HTTP using the JWT bearer flow (see Authentication), so CORS on the
+API must allow the SPA's origin.
 
 ## Runtime & tooling
 
@@ -64,6 +69,20 @@ across modules is enforced in the application, not the database. The single
 `ledger`, `invoices`, plus `auth` for ASP.NET Core Identity tables) to keep
 boundaries visible at the data layer. Note `invoice_templates` lives in the
 `identity` schema even though invoicing is its own module.
+
+### Frontend (`frontend/`)
+
+A standalone **React + Vite + TypeScript** SPA, deployed separately from the API.
+It is a pure API client: it authenticates via the Identity endpoints, stores the
+JWT, and sends it as `Authorization: Bearer <token>` on every call.
+
+- `frontend/src/lib/api.ts` — the single fetch wrapper; reads the API base URL
+  from `VITE_API_URL` (see `frontend/.env.example`) and attaches the bearer token.
+- Build: `cd frontend && npm install && npm run build` → static assets in
+  `frontend/dist/` (host on any static host — Vercel/Netlify/Cloudflare Pages).
+- Dev: `npm run dev` (Vite dev server). Point `VITE_API_URL` at the running API.
+- `node_modules/` and `dist/` are gitignored; the .NET build ignores `frontend/`
+  (it only compiles `.cs`).
 
 ## Key patterns
 
@@ -168,6 +187,14 @@ identical for every business. Per-business customization is **out of scope**.
   config section is present in `appsettings.example.json`. The remaining caveat: the
   webhook authenticates with a shared **secret header**, not an HMAC signature, so it
   doesn't verify the payload came from Mono unmodified.
+- **CORS is misconfigured and will break the SPA.** `Program.cs` registers a
+  **default** policy (`AddCors(o => o.AddDefaultPolicy(...))`) but activates a
+  **named** policy that was never defined (`app.UseCors("LocalhostPolicy")`) — the
+  named policy will fail at runtime. It also uses `AllowAnyOrigin()`, which is too
+  permissive for production and is incompatible with credentialed requests. Before
+  the `frontend/` SPA can call the API cross-origin, this needs a single coherent
+  policy that names the SPA's origin (and `AllowCredentials()` if cookies are ever
+  used) applied consistently in `AddCors` and `UseCors`.
 - **No account/category editing endpoints** (consistent with reference-data scope).
 - **Migrations exist but are not applied at startup** — `Program.cs` uses
   `EnsureCreated`, not `Migrate` (see Runtime & tooling).
