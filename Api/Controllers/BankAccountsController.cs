@@ -1,5 +1,7 @@
 using Bookkeeping.Application.Transactions;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
@@ -13,6 +15,7 @@ public sealed class BankAccountsController(IBankAccountService accounts) : Contr
 {
     public sealed record LinkRequest(string AuthorisationCode);
 
+    [Authorize(Policy = Permissions.BankAccounts.Manage)]
     [HttpPost]
     public async Task<IActionResult> Link(Guid businessId, LinkRequest body, CancellationToken ct)
     {
@@ -22,10 +25,12 @@ public sealed class BankAccountsController(IBankAccountService accounts) : Contr
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.BankAccounts.Read)]
     [HttpGet]
     public async Task<IActionResult> List(Guid businessId, CancellationToken ct)
         => Ok(await accounts.ListAsync(new BusinessId(businessId), ct));
 
+    [Authorize(Policy = Permissions.BankAccounts.Manage)]
     [HttpDelete("{accountId:guid}")]
     public async Task<IActionResult> Unlink(Guid accountId, CancellationToken ct)
     {

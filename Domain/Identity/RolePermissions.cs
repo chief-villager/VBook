@@ -10,24 +10,54 @@ public static class RolePermissions
     public static readonly IReadOnlyDictionary<BusinessRole, string[]> Map =
         new Dictionary<BusinessRole, string[]>
         {
+            // The owner holds every capability for their business.
             [BusinessRole.Owner] = new[]
             {
+                Permissions.Business.Read,
+                Permissions.Business.Manage,
+                Permissions.Users.Read,
+                Permissions.Users.Create,
+                Permissions.Users.Delete,
                 Permissions.Invoices.Read,
                 Permissions.Invoices.Create,
                 Permissions.Invoices.Update,
                 Permissions.Invoices.Delete,
-                Permissions.Users.Read,
-                Permissions.Users.Create,
-                Permissions.Users.Delete,
+                Permissions.Transactions.Read,
+                Permissions.Transactions.Record,
+                Permissions.Ledger.Read,
+                Permissions.Reports.Read,
+                Permissions.CreditReadiness.Read,
+                Permissions.BankAccounts.Read,
+                Permissions.BankAccounts.Manage,
+                Permissions.BankImports.Read,
+                Permissions.BankImports.Manage,
             },
+            // Operational access: run the books and the bank feed, but no user
+            // management and no invoice edit/delete.
             [BusinessRole.Admin] = new[]
             {
+                Permissions.Business.Read,
+                Permissions.Business.Manage,
                 Permissions.Invoices.Read,
                 Permissions.Invoices.Create,
+                Permissions.Transactions.Read,
+                Permissions.Transactions.Record,
+                Permissions.Ledger.Read,
+                Permissions.Reports.Read,
+                Permissions.BankAccounts.Read,
+                Permissions.BankAccounts.Manage,
+                Permissions.BankImports.Read,
+                Permissions.BankImports.Manage,
             },
+            // Read-only across the financial picture.
             [BusinessRole.Accountant] = new[]
             {
+                Permissions.Business.Read,
                 Permissions.Invoices.Read,
+                Permissions.Transactions.Read,
+                Permissions.Ledger.Read,
+                Permissions.Reports.Read,
+                Permissions.CreditReadiness.Read,
             },
         };
 }

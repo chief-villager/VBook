@@ -1,6 +1,8 @@
 using Bookkeeping.Application.Identity;
 using Bookkeeping.Application.Invoices;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
@@ -21,6 +23,7 @@ public sealed class InvoiceController(
         decimal VatRate,
         IReadOnlyList<InvoiceLineItemDto> LineItems);
 
+    [Authorize(Policy = Permissions.Invoices.Create)]
     [HttpPost]
     public async Task<IActionResult> Create(Guid businessId, CreateInvoiceRequest body, CancellationToken ct)
     {
@@ -33,10 +36,12 @@ public sealed class InvoiceController(
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.Invoices.Read)]
     [HttpGet]
     public async Task<IActionResult> List(Guid businessId, CancellationToken ct)
         => Ok(await invoices.ListAsync(new BusinessId(businessId), ct));
 
+    [Authorize(Policy = Permissions.Invoices.Read)]
     [HttpGet("{invoiceId:guid}")]
     public async Task<IActionResult> Get(Guid invoiceId, CancellationToken ct)
     {
@@ -44,6 +49,7 @@ public sealed class InvoiceController(
         return invoice is null ? NotFound() : Ok(invoice);
     }
 
+    [Authorize(Policy = Permissions.Invoices.Read)]
     [HttpGet("{invoiceId:guid}/pdf")]
     public async Task<IActionResult> DownloadPdf(Guid businessId, Guid invoiceId, CancellationToken ct)
     {
@@ -87,6 +93,7 @@ public sealed class InvoiceController(
         }
     }
 
+    [Authorize(Policy = Permissions.Invoices.Update)]
     [HttpPost("{invoiceId:guid}/paid")]
     public async Task<IActionResult> MarkAsPaid(Guid invoiceId, CancellationToken ct)
     {

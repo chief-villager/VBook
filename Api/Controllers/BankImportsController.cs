@@ -1,6 +1,8 @@
 using Bookkeeping.Application.Transactions;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Transactions;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
@@ -14,6 +16,7 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
     public sealed record PullRequest(string ExternalAccountId, DateOnly From, DateOnly To);
     public sealed record CategoriseRequest(Guid CategoryId);
 
+    [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost]
     public async Task<IActionResult> Pull(Guid businessId, PullRequest body, CancellationToken ct)
     {
@@ -26,10 +29,12 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.BankImports.Read)]
     [HttpGet]
     public async Task<IActionResult> List(Guid businessId, [FromQuery] StagedTransactionStatus status = StagedTransactionStatus.Pending, CancellationToken ct = default)
         => Ok(await imports.ListAsync(new BusinessId(businessId), status, ct));
 
+    [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPatch("{stagedId:guid}")]
     public async Task<IActionResult> Categorise(Guid stagedId, CategoriseRequest body, CancellationToken ct)
     {
@@ -38,6 +43,7 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost("{stagedId:guid}/approve")]
     public async Task<IActionResult> Approve(Guid stagedId, CancellationToken ct)
     {
@@ -47,6 +53,7 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost("{stagedId:guid}/discard")]
     public async Task<IActionResult> Discard(Guid stagedId, CancellationToken ct)
     {

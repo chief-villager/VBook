@@ -92,9 +92,17 @@ boundaries visible at the data layer. Note `invoice_templates` lives in the
     configured with `AddStandardResilienceHandler` (retry + circuit breaker +
     timeout). Mono amounts are in **kobo (minor units)**; the adapter divides by
     100 to reach the `Money` value object. `MonoOptions` is bound + `ValidateOnStart`.
-  - `IInvoiceDocumentStore` → `R2InvoiceDocumentStore` (Cloudflare R2 over the
-    S3-compatible API via `AWSSDK.S3`); `IInvoicePdfGenerator` → `InvoicePdfGenerator`
-    (QuestPDF, whose Community license is set in `Program.cs`).
+  - `IObjectStore` (`Application/Abstractions`) → `R2ObjectStore`
+    (`Infrastructure/Documents`) — the general-purpose object store that owns the
+    Cloudflare R2/S3 mechanics (`AWSSDK.S3`, path-style, public-URL-or-presigned).
+    Any module stores binary objects through it (invoice PDFs, business logos, …)
+    without touching a vendor SDK. Semantic stores build their own key convention
+    and delegate here: `IInvoiceDocumentStore` → `R2InvoiceDocumentStore` owns the
+    `invoices/{id}.pdf` key; invoice-template logos are uploaded by `IdentityService`
+    under a server-derived `logos/{businessId}/{guid}{ext}` key (the endpoint takes an
+    `IFormFile`, validates the image type, and never trusts a client filename).
+    `IInvoicePdfGenerator` → `InvoicePdfGenerator` (QuestPDF, whose Community license
+    is set in `Program.cs`).
   - `ITokenIssuer` → `JwtTokenIssuer` (`Infrastructure/Auth`).
 - **Outbox + background processing (invoice PDFs)** — creating an invoice raises
   `InvoiceCreated`; `InvoiceCreatedHandler` stages an `InvoicePdfJob` (the
@@ -109,8 +117,21 @@ boundaries visible at the data layer. Note `invoice_templates` lives in the
   schema). `BookkeepingUserStore` disables the store's auto-save so credential
   creation **joins the caller's unit of work** rather than committing on its own —
   the domain user and its credentials commit together, linked by a shared `Guid`
-  id (no FK). See the caveat under Known gaps: issuing/validating tokens works, but
-  endpoints are not yet actually protected.
+  id (no FK). **Enforcement is on:** a deny-by-default fallback policy in `Program.cs`
+  requires an authenticated caller on every endpoint except those marked
+  `[AllowAnonymous]` (login, the registration flows, the Mono webhook), and
+  fine-grained `[Authorize(Policy = ...)]` permission checks layer on top.
+- **Per-business permission authorization** — the JWT carries one `business_role`
+  claim per membership (value `"{businessId}:{role}"`, stamped by `AuthService` at
+  login). `PermissionPolicyProvider` turns a permission name used as a policy
+  (`[Authorize(Policy = Permissions.Invoices.Create)]`) into a `PermissionRequirement`;
+  `PermissionAuthorizationHandler` reads the `businessId` off the route, finds the
+  caller's role for **that** business from the claims, and grants access if
+  `RolePermissions.Map[role]` contains the permission. So the same user can pass on
+  one business and be denied on another. `Domain/Permissions.cs` is the capability
+  catalog; `RolePermissions.Map` (Owner/Admin/Accountant) is the single source of
+  truth the handler reads at runtime and the `IdentitySeeder` seeds role claims from —
+  so adding a permission needs no DB reset for enforcement to pick it up.
 
 ## Reference data: chart of accounts & categories
 
@@ -128,18 +149,36 @@ identical for every business. Per-business customization is **out of scope**.
 
 ## Known gaps / not implemented
 
-- **Authentication exists, but enforcement does not.** JWT issuance/validation and
-  ASP.NET Core Identity are wired up, but **no controller carries `[Authorize]`** and
-  `IdentityService.EnsureOwnershipAsync` is still **not called anywhere**. Endpoints
-  remain effectively anonymous and trust the `businessId`/`ownerId` in the route/body.
-- **Bank feed is mid-implementation** (branch `bankfeed-implementation`). The Mono
-  adapter, DI wiring, and webhook controller (`MonoWebhookController`, secret-header
-  auth, no HMAC) exist, but `IBankFeedProvider` is only **injected** into
-  `TransactionService` — no import-into-ledger flow consumes it yet. The Mono config
-  section is not present in `appsettings.example.json`.
+- **Authorization is route-scoped, not resource-scoped (IDOR).** Enforcement is now
+  wired — every endpoint requires authentication (deny-by-default) and business
+  actions carry `[Authorize(Policy = ...)]` permission checks keyed on the route's
+  `businessId`. The remaining gap: the handler proves the caller has the permission
+  for the `businessId` **in the route**, but the services still load invoices, staged
+  bank rows, and linked accounts by their **own id** without confirming that resource
+  belongs to that business. So a caller with rights on business A can pass their own
+  `businessId` in the route alongside an `invoiceId`/`stagedId`/`accountId` from
+  business B and operate on it. Closing this is the `EnsureOwnershipAsync` /
+  resource-scoping work (still **not called anywhere**). The anonymous onboarding
+  endpoints also still trust the `ownerId` in the body.
+- **Bank feed webhook auth is secret-header only, not HMAC.** The Mono bank feed
+  is implemented end to end — link (`BankAccountsController` → `BankAccountService`
+  exchanges the widget code via `IBankFeedProvider`/`MonoBankFeedProvider`), pull +
+  stage + approve/discard into the ledger (`BankImportsController` →
+  `BankImportService`, `StagedBankTransaction`), and `MonoWebhookController`. The Mono
+  config section is present in `appsettings.example.json`. The remaining caveat: the
+  webhook authenticates with a shared **secret header**, not an HMAC signature, so it
+  doesn't verify the payload came from Mono unmodified.
 - **No account/category editing endpoints** (consistent with reference-data scope).
 - **Migrations exist but are not applied at startup** — `Program.cs` uses
   `EnsureCreated`, not `Migrate` (see Runtime & tooling).
+- **The invoice PDF outbox assumes a single consumer.**
+  `InvoicePdfJobRepository.ClaimNextPendingAsync` is named "Claim" but does not
+  actually claim/lock a row — it just reads the oldest `Pending` job. There is no
+  intermediate `Processing` status and no row lock, and `InvoicePdfOutboxProcessor`
+  only marks the job `Done`/`Failed` after the work. This is safe for the current
+  single hosted instance, but two processors would both pick the same row and render
+  the PDF twice. True concurrency would need a claiming transition (a `Processing`
+  status) or a DB-level claim (e.g. SQL Server `UPDATE ... WITH (UPDLOCK, READPAST)`).
 
 ## Conventions
 

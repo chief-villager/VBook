@@ -16,9 +16,26 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
         string Email, string DisplayName, string Password, string BusinessName, BusinessSector Sector);
     public sealed record AddMemberRequest(string Email, string DisplayName, string Password, BusinessRole Role);
     public sealed record LoginRequest(string Email, string Password);
-    public sealed record SetInvoiceTemplateRequest(string LogoUrl, string BusinessName,
-        string AccountNumber, string BankName, string Terms);
+    public sealed record ForgotPasswordRequest(string Email);
+    public sealed record ResetPasswordRequest(string NewPassword);
+    public sealed record SendEmailConfirmationRequest(string Email);
 
+    // Multipart form for the invoice template. Binding the whole form into one model
+    // (rather than spreading [FromForm] across parameters) keeps Swagger able to
+    // describe the file upload.
+    public sealed class SetInvoiceTemplateForm
+    {
+        public IFormFile Logo { get; init; } = default!;
+        public string BusinessName { get; init; } = string.Empty;
+        public string AccountNumber { get; init; } = string.Empty;
+        public string BankName { get; init; } = string.Empty;
+        public string Terms { get; init; } = string.Empty;
+    }
+
+    // Logos are small; cap the upload so a large file can't be buffered into memory.
+    private const long MaxLogoBytes = 2 * 1024 * 1024;
+
+    [AllowAnonymous]
     [HttpPost("api/users")]
     public async Task<IActionResult> RegisterUser(RegisterUserRequest body, CancellationToken ct)
     {
@@ -28,6 +45,7 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
             : BadRequest(new { error = result.Error });
     }
 
+    [AllowAnonymous]
     [HttpPost("api/auth/login")]
     public async Task<IActionResult> Login(LoginRequest body, CancellationToken ct)
     {
@@ -37,6 +55,59 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
             : BadRequest(new { error = result.Error });
     }
 
+    // Issues a password-reset token (as a callback URL). In production this URL is
+    // emailed to the user rather than returned in the response; it is surfaced here
+    // because no email sender is wired. Anonymous: a user who forgot their password
+    // cannot be signed in.
+    [AllowAnonymous]
+    [HttpPost("api/auth/password-reset-token")]
+    public async Task<IActionResult> RequestPasswordReset(ForgotPasswordRequest body, CancellationToken ct)
+    {
+        var result = await auth.GetPasswordResetTokenAsync(body.Email, ct);
+        return result.IsSuccess
+            ? Ok(new { resetUrl = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    // email and token ride in the query string (they come straight from the emailed
+    // reset link); the new password stays in the body so it never lands in server
+    // logs or browser history.
+    [AllowAnonymous]
+    [HttpPost("api/auth/reset-password")]
+    public async Task<IActionResult> ResetPassword(
+        [FromQuery] string email, [FromQuery] string token, ResetPasswordRequest body, CancellationToken ct)
+    {
+        var result = await auth.ResetPasswordAsync(email, token, body.NewPassword, ct);
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    // Issues an email-confirmation token (as a callback URL); same emailing caveat as
+    // the password-reset token above.
+    [AllowAnonymous]
+    [HttpPost("api/auth/email-confirmation-token")]
+    public async Task<IActionResult> RequestEmailConfirmation(SendEmailConfirmationRequest body, CancellationToken ct)
+    {
+        var result = await auth.GetEmailConfirmationTokenAsync(body.Email, ct);
+        return result.IsSuccess
+            ? Ok(new { confirmationUrl = result.Value })
+            : BadRequest(new { error = result.Error });
+    }
+
+    // Opened directly from the emailed confirmation link, so it's a GET and both
+    // values arrive in the query string.
+    [AllowAnonymous]
+    [HttpGet("api/auth/confirm-email")]
+    public async Task<IActionResult> ConfirmEmail([FromQuery] string email, [FromQuery] string token, CancellationToken ct)
+    {
+        var result = await auth.ConfirmEmailAsync(email, token, ct);
+        return result.IsSuccess
+            ? Ok()
+            : BadRequest(new { error = result.Error });
+    }
+
+    [AllowAnonymous]
     [HttpPost("api/businesses")]
     public async Task<IActionResult> RegisterBusiness(RegisterBusinessRequest body, CancellationToken ct)
     {
@@ -47,6 +118,7 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
     }
 
     // Combined signup: creates the owner and their business in one transaction.
+    [AllowAnonymous]
     [HttpPost("api/businesses/register")]
     public async Task<IActionResult> RegisterBusinessWithOwner(RegisterBusinessWithOwnerRequest body, CancellationToken ct)
     {
@@ -70,6 +142,7 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.Users.Read)]
     [HttpGet("api/businesses/{businessId:guid}/members")]
     public async Task<IActionResult> ListMembers(Guid businessId, CancellationToken ct)
     {
@@ -77,6 +150,7 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.Business.Read)]
     [HttpGet("api/businesses/{businessId:guid}")]
     public async Task<IActionResult> GetBusiness(Guid businessId, CancellationToken ct)
     {
@@ -84,14 +158,28 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
         return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
+    // Multipart: the logo is uploaded as a file and stored in object storage; the
+    // other fields ride alongside as form values.
+    [Authorize(Policy = Permissions.Business.Manage)]
     [HttpPut("api/businesses/{businessId:guid}/invoice-template")]
-    public async Task<IActionResult> SetInvoiceTemplate(Guid businessId, SetInvoiceTemplateRequest body, CancellationToken ct)
+    [RequestSizeLimit(MaxLogoBytes)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SetInvoiceTemplate(
+        Guid businessId, [FromForm] SetInvoiceTemplateForm form, CancellationToken ct)
     {
-        var result = await identity.SetInvoiceTemplateAsync(new BusinessId(businessId), body.LogoUrl,
-            body.BusinessName, body.AccountNumber, body.BankName, body.Terms, ct);
+        var logo = form.Logo;
+        if (logo is null || logo.Length == 0)
+            return BadRequest(new { error = "A logo file is required." });
+        if (logo.Length > MaxLogoBytes)
+            return BadRequest(new { error = "Logo exceeds the 2 MB limit." });
+
+        await using var stream = logo.OpenReadStream();
+        var result = await identity.SetInvoiceTemplateAsync(new BusinessId(businessId),
+            stream, logo.ContentType, form.BusinessName, form.AccountNumber, form.BankName, form.Terms, ct);
         return result.IsSuccess ? Ok() : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.Business.Read)]
     [HttpGet("api/businesses/{businessId:guid}/invoice-template")]
     public async Task<IActionResult> GetInvoiceTemplate(Guid businessId, CancellationToken ct)
     {

@@ -1,5 +1,7 @@
 using Bookkeeping.Application.Transactions;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
@@ -10,10 +12,12 @@ public sealed class TransactionsController(ITransactionService transactions) : C
 {
     public sealed record RecordTransactionRequest(decimal Amount, Guid CategoryId, DateOnly OccurredOn, string? Note);
 
+    [Authorize(Policy = Permissions.Transactions.Read)]
     [HttpGet("categories")]
     public async Task<IActionResult> GetCategories(Guid businessId, CancellationToken ct)
         => Ok(await transactions.GetCategoriesAsync(new BusinessId(businessId), ct));
 
+    [Authorize(Policy = Permissions.Transactions.Record)]
     [HttpPost("transactions")]
     public async Task<IActionResult> Record(Guid businessId, RecordTransactionRequest body, CancellationToken ct)
     {
@@ -25,6 +29,7 @@ public sealed class TransactionsController(ITransactionService transactions) : C
             : BadRequest(new { error = result.Error });
     }
 
+    [Authorize(Policy = Permissions.Transactions.Read)]
     [HttpGet("transactions")]
     public async Task<IActionResult> List(Guid businessId, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
         => Ok(await transactions.ListAsync(new BusinessId(businessId), new DateRange(from, to), ct));

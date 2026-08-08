@@ -128,6 +128,8 @@ public static class ModuleRegistration
 
         // R2 storage + the background worker that drains the PDF outbox out of band.
         services.Configure<R2Options>(configuration.GetSection("R2"));
+        // General-purpose object store (singleton: the S3 client is thread-safe and reused).
+        services.AddSingleton<IObjectStore, R2ObjectStore>();
         services.AddSingleton<IInvoiceDocumentStore, R2InvoiceDocumentStore>();
         services.AddHostedService<InvoicePdfOutboxProcessor>();
         return services;
