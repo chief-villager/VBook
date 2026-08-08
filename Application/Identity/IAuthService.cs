@@ -9,7 +9,11 @@ public interface IAuthService
     // Stages credentials for a domain user on the current unit of work. Does NOT
     // save — the caller's SaveChangesAsync commits the user and credentials together.
     Task<Result> CreateCredentialsAsync(UserId userId, string email, string password, CancellationToken ct = default);
+    Task<Result<string>> GetPasswordResetTokenAsync(string email, CancellationToken ct = default);
+    Task<Result<bool>> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken ct = default);
 
     // Verifies email/password and returns a signed JWT on success.
     Task<Result<string>> SignInAsync(string email, string password, CancellationToken ct = default);
+    Task<Result<bool>> ConfirmEmailAsync(string email, string token, CancellationToken ct = default);
+    Task<Result<string>> GetEmailConfirmationTokenAsync(string email, CancellationToken ct = default);
 }

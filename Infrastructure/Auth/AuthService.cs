@@ -1,6 +1,7 @@
 using Bookkeeping.Application.Identity;
 using Bookkeeping.Domain.Common;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Options;
 
 namespace Bookkeeping.Infrastructure.Auth;
 
@@ -9,12 +10,30 @@ public sealed class AuthService : IAuthService
     private readonly UserManager<ApplicationUser> _users;
     private readonly ITokenIssuer _tokens;
     private readonly IIdentityRepository _identity;
+    private readonly IOptions<Hosting> _hosting;
 
-    public AuthService(UserManager<ApplicationUser> users, ITokenIssuer tokens, IIdentityRepository identity)
+    public AuthService(
+    UserManager<ApplicationUser> users, 
+    ITokenIssuer tokens, 
+    IIdentityRepository identity, 
+    IOptions<Hosting> hosting)
     {
         _users = users;
         _tokens = tokens;
         _identity = identity;
+        _hosting = hosting;
+    }
+
+    public async Task<Result<bool>> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken ct = default)
+    {
+        var principal = await _users.FindByEmailAsync(email);
+        if (principal is null)
+            return Result<bool>.Failure("Invalid credentials.");
+
+        var result = await _users.ResetPasswordAsync(principal, token, newPassword);
+        return result.Succeeded
+            ? Result<bool>.Success(true)
+            : Result<bool>.Failure(string.Join("; ", result.Errors.Select(e => e.Description)));
     }
 
     public async Task<Result> CreateCredentialsAsync(UserId userId, string email, string password, CancellationToken ct = default)
@@ -29,6 +48,40 @@ public sealed class AuthService : IAuthService
             ? Result.Success()
             : Result.Failure(string.Join("; ", result.Errors.Select(e => e.Description)));
     }
+
+    public async Task<Result<string>> GetEmailConfirmationTokenAsync(string email, CancellationToken ct = default)
+    {
+        var principal = await _users.FindByEmailAsync(email);
+        if (principal is null)
+            return Result<string>.Failure("Invalid credentials.");
+
+        var token = await _users.GenerateEmailConfirmationTokenAsync(principal);
+        var callbackurl = $"{_hosting.Value.Urls}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        return Result<string>.Success(callbackurl);
+    }
+    public async Task<Result<bool>> ConfirmEmailAsync(string email, string token, CancellationToken ct = default)
+    {
+        var principal = await _users.FindByEmailAsync(email);
+        if (principal is null)
+            return Result<bool>.Failure("Invalid credentials.");
+
+        var result = await _users.ConfirmEmailAsync(principal, token);
+        return result.Succeeded
+            ? Result<bool>.Success(true)
+            : Result<bool>.Failure(string.Join("; ", result.Errors.Select(e => e.Description)));
+    }
+    public async Task<Result<string>> GetPasswordResetTokenAsync(string email, CancellationToken ct = default)
+    {
+        var principal = await _users.FindByEmailAsync(email);
+        if (principal is null)
+            return Result<string>.Failure("Invalid credentials.");
+
+        var token = await _users.GeneratePasswordResetTokenAsync(principal);
+        var callbackurl = $"{_hosting.Value.Urls}/reset-password?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        return Result<string>.Success(callbackurl);
+    }
+
+ 
 
     public async Task<Result<string>> SignInAsync(string email, string password, CancellationToken ct = default)
     {

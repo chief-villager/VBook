@@ -1,10 +1,13 @@
 using Bookkeeping.Application.CreditReadiness;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = Permissions.CreditReadiness.Read)]
 [Route("api/businesses/{businessId:guid}/credit-readiness")]
 public sealed class CreditReadinessController(ICreditReadinessService credit) : ControllerBase
 {

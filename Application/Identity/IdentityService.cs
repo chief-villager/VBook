@@ -1,3 +1,4 @@
+using Bookkeeping.Application.Abstractions;
 using Bookkeeping.Application.Common;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Identity;
@@ -6,14 +7,27 @@ namespace Bookkeeping.Application.Identity;
 
 public sealed class IdentityService : IIdentityService
 {
+    // Supported logo image types mapped to the file extension used in the object key.
+    private static readonly IReadOnlyDictionary<string, string> LogoExtensions =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image/png"] = ".png",
+            ["image/jpeg"] = ".jpg",
+            ["image/webp"] = ".webp",
+            ["image/svg+xml"] = ".svg",
+        };
+
     private readonly IIdentityRepository _repository;
     private readonly IAuthService _authService;
+    private readonly IObjectStore _objectStore;
     private readonly IUnitOfWork _unitOfWork;
 
-    public IdentityService(IIdentityRepository repository, IAuthService authService, IUnitOfWork unitOfWork)
+    public IdentityService(IIdentityRepository repository, IAuthService authService,
+        IObjectStore objectStore, IUnitOfWork unitOfWork)
     {
         _repository = repository;
         _authService = authService;
+        _objectStore = objectStore;
         _unitOfWork = unitOfWork;
     }
 
@@ -161,13 +175,22 @@ public sealed class IdentityService : IIdentityService
             : Result.Failure("User does not own this business.");
     }
 
-    public async Task<Result> SetInvoiceTemplateAsync(BusinessId businessId, string logoUrl,
+    public async Task<Result> SetInvoiceTemplateAsync(BusinessId businessId,
+    Stream logo, string logoContentType,
     string businessName, string accountNumber, string bankName, string terms,
     CancellationToken ct = default)
     {
+        if (!LogoExtensions.TryGetValue(logoContentType ?? string.Empty, out var extension))
+            return Result.Failure("Unsupported logo type. Allowed: PNG, JPEG, WEBP, SVG.");
+
         var business = await _repository.GetBusinessAsync(businessId, ct);
         if (business is null)
             return Result.Failure("Business not found.");
+
+        // Derive the key server-side rather than trusting a client-supplied filename.
+        var key = $"logos/{businessId.Value}/{Guid.NewGuid():N}{extension}";
+        // Non-null: it matched a LogoExtensions key above.
+        var logoUrl = await _objectStore.PutAsync(key, logo, logoContentType!, ct);
 
         var result = business.SetTemplate(logoUrl, businessName, accountNumber, bankName, terms);
         if (result.IsFailure)

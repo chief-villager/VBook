@@ -1,10 +1,13 @@
 using Bookkeeping.Application.Reporting;
+using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Bookkeeping.Api.Controllers;
 
 [ApiController]
+[Authorize(Policy = Permissions.Reports.Read)]
 [Route("api/businesses/{businessId:guid}/reports")]
 public sealed class ReportingController(IFinancialReportingService reporting) : ControllerBase
 {

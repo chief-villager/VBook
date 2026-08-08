@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Bookkeeping.Infrastructure.Mono;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Options;
 
@@ -11,7 +12,9 @@ namespace Bookkeeping.Api.Controllers;
 // Receives asynchronous notifications from Mono (account updates, reauth prompts,
 // unlink confirmations, etc.). Mono authenticates the call by echoing our configured
 // secret in the "mono-webhook-secret" header — there is no HMAC signature, so we
-// compare the header to MonoOptions.WebhookSecret before trusting the body.
+// compare the header to MonoOptions.WebhookSecret before trusting the body. Mono has
+// no JWT, so this endpoint opts out of the global auth requirement and self-guards.
+[AllowAnonymous]
 [ApiController]
 [Route("api/webhooks/mono")]
 public sealed class MonoWebhookController(

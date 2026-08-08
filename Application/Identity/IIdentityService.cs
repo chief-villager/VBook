@@ -23,7 +23,10 @@ public interface IIdentityService
     Task<Result<IReadOnlyList<BusinessMemberDto>>> ListMembersAsync(BusinessId businessId, CancellationToken ct = default);
     Task<Result<BusinessContext>> GetBusinessAsync(BusinessId businessId, CancellationToken ct = default);
     Task<Result> EnsureOwnershipAsync(UserId userId, BusinessId businessId, CancellationToken ct = default);
-    Task<Result> SetInvoiceTemplateAsync(BusinessId businessId, string logoUrl,
+    // Uploads the logo to object storage and stores the resulting URL. The caller
+    // owns the stream; content type must be a supported image type.
+    Task<Result> SetInvoiceTemplateAsync(BusinessId businessId,
+    Stream logo, string logoContentType,
     string businessName, string accountNumber, string bankName, string terms,
     CancellationToken ct = default);
     Task<Result<InvoiceTemplateDto>> GetInvoiceTemplateAsync(BusinessId businessId, CancellationToken ct = default);
