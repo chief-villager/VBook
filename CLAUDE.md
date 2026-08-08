@@ -187,14 +187,12 @@ identical for every business. Per-business customization is **out of scope**.
   config section is present in `appsettings.example.json`. The remaining caveat: the
   webhook authenticates with a shared **secret header**, not an HMAC signature, so it
   doesn't verify the payload came from Mono unmodified.
-- **CORS is misconfigured and will break the SPA.** `Program.cs` registers a
-  **default** policy (`AddCors(o => o.AddDefaultPolicy(...))`) but activates a
-  **named** policy that was never defined (`app.UseCors("LocalhostPolicy")`) — the
-  named policy will fail at runtime. It also uses `AllowAnyOrigin()`, which is too
-  permissive for production and is incompatible with credentialed requests. Before
-  the `frontend/` SPA can call the API cross-origin, this needs a single coherent
-  policy that names the SPA's origin (and `AllowCredentials()` if cookies are ever
-  used) applied consistently in `AddCors` and `UseCors`.
+- **CORS is wide open (`AllowAnyOrigin`).** `Program.cs` defines a default policy
+  with `AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()` and applies it via
+  `app.UseCors()`. This unblocks the `frontend/` SPA from any origin, but is too
+  permissive for production and is incompatible with credentialed requests — before
+  going live, replace it with a named policy that lists the SPA's real origin(s)
+  (and `AllowCredentials()` if refresh tokens ever move into cookies).
 - **No account/category editing endpoints** (consistent with reference-data scope).
 - **Migrations exist but are not applied at startup** — `Program.cs` uses
   `EnsureCreated`, not `Migrate` (see Runtime & tooling).
