@@ -86,11 +86,22 @@ public sealed class BankImportService : IBankImportService
     // TransactionRecorded event (→ balanced journal entry), and the staged status
     // flip all commit in a single SaveChanges, so approval is atomic: no orphaned
     // Transaction and no double-record if the process dies mid-way.
-    public async Task<Result<TransactionId>> ApproveAsync(StagedTransactionId id, CancellationToken ct = default)
+    public async Task<Result<TransactionId>> ApproveAsync(
+        StagedTransactionId id, CategoryId? categoryId = null, CancellationToken ct = default)
     {
         var staged = await _staged.GetAsync(id, ct);
         if (staged is null)
             return Result<TransactionId>.Failure("Staged import not found.");
+
+        // Categorise-and-approve: apply the category chosen in the review UI before
+        // promoting, so a single click both tags and records the row.
+        if (categoryId is not null)
+        {
+            var categorised = staged.Categorise(categoryId.Value);
+            if (categorised.IsFailure)
+                return Result<TransactionId>.Failure(categorised.Error);
+        }
+
         if (staged.CategoryId is null)
             return Result<TransactionId>.Failure("Assign a category before approving.");
 
