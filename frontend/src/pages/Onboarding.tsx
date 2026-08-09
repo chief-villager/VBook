@@ -1,21 +1,24 @@
 // Vbook Onboarding — React port of "Vbook Onboarding.dc.html" (Claude Design).
-// A three-step wizard: account -> business -> done. Visuals come from the design
-// system in src/styles/industry.css (blueprint cards, corner marks, tokens).
+// A two-step flow: setup -> done. The single "setup" step collects the account
+// (name, email, phone, password) and the business (name, type, sector, RC) on one
+// form. Visuals come from the design system in src/styles/industry.css (blueprint
+// cards, corner marks, tokens).
 //
 // Inputs are controlled so the values are ready to POST to the Identity endpoints;
-// wiring to the API (register account, create business) is left as a TODO — the
-// buttons currently just advance the wizard, matching the original prototype.
+// wiring to the API is left as a TODO — "Create my account" just advances the flow,
+// matching the original prototype.
 
 import { useState, type CSSProperties } from 'react'
 
-type Step = 'account' | 'business' | 'done'
+type Step = 'setup' | 'done'
 
-const ORDER: Step[] = ['account', 'business', 'done']
+const ORDER: Step[] = ['setup', 'done']
 const LABELS: { id: Step; label: string }[] = [
-  { id: 'account', label: 'Your account' },
-  { id: 'business', label: 'Business' },
+  { id: 'setup', label: 'Your details' },
+  { id: 'done', label: 'Finished' },
 ]
 const BIZ_TYPES = ['Sole trader', 'Limited company', 'Partnership', 'Not registered yet']
+const SECTORS = ['Retail', 'Wholesale', 'Manufacturing', 'Agriculture', 'Services', 'Hospitality', 'Transport', 'Other']
 
 const DONE_ITEMS = [
   'Connect a bank account from the dashboard to start your records automatically',
@@ -33,8 +36,7 @@ const cornerMarks = (
 )
 
 export default function Onboarding() {
-  const [step, setStep] = useState<Step>('account')
-  const [bizType, setBizType] = useState('Limited company')
+  const [step, setStep] = useState<Step>('setup')
 
   // Account fields
   const [name, setName] = useState('')
@@ -44,13 +46,13 @@ export default function Onboarding() {
 
   // Business fields
   const [bizName, setBizName] = useState('')
-  const [industry, setIndustry] = useState('')
+  const [bizType, setBizType] = useState('Limited company')
+  const [sector, setSector] = useState(SECTORS[0])
   const [rcNumber, setRcNumber] = useState('')
 
   const currentIndex = ORDER.indexOf(step)
   const next = () => setStep(ORDER[Math.min(currentIndex + 1, ORDER.length - 1)])
-  const back = () => setStep(ORDER[Math.max(currentIndex - 1, 0)])
-  const restart = () => setStep('account')
+  const restart = () => setStep('setup')
 
   return (
     <div
@@ -148,37 +150,31 @@ export default function Onboarding() {
         >
           {cornerMarks}
 
-          {step === 'account' && (
+          {step === 'setup' && (
             <div>
               <div style={kickerStyle}>Step 1 of 2</div>
               <h1 style={headingStyle}>Let&rsquo;s open your books</h1>
-              <p style={leadStyle}>Two short steps, about two minutes. You can change any of it later.</p>
+              <p style={{ ...leadStyle, marginBottom: 28 }}>
+                One short form, about two minutes. You can change any of it later.
+              </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 26 }}>
+              {/* About you */}
+              <div style={{ ...sectionKickerStyle, marginBottom: 14 }}>About you</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 30 }}>
                 <Field id="ob-name" label="Your name" type="text" placeholder="Adaeze Okafor" value={name} onChange={setName} />
-                <Field id="ob-email" label="Email" type="email" placeholder="you@yourbusiness.com" value={email} onChange={setEmail} />
-                <Field id="ob-phone" label="Phone number" type="tel" placeholder="0803 000 0000" value={phone} onChange={setPhone} />
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                  <Field id="ob-email" label="Email" type="email" placeholder="you@yourbusiness.com" value={email} onChange={setEmail} flex="1 1 220px" />
+                  <Field id="ob-phone" label="Phone number" type="tel" placeholder="0803 000 0000" value={phone} onChange={setPhone} flex="1 1 180px" />
+                </div>
                 <Field id="ob-pass" label="Create a password" type="password" placeholder="At least 8 characters" value={password} onChange={setPassword} />
               </div>
 
-              {/* TODO: POST to the register endpoint before advancing. */}
-              <button onClick={next} className="btn btn-primary btn-block blueprint" style={{ position: 'relative' }}>
-                {cornerMarks}
-                Create my account
-              </button>
-              <p style={{ margin: '14px 0 0 0', fontSize: 12.5, color: 'var(--color-neutral-600)', textAlign: 'center' }}>
-                Already have an account? <a href="#">Sign in</a>
+              {/* About the business */}
+              <div style={{ ...sectionKickerStyle, marginBottom: 6 }}>About the business</div>
+              <p style={{ margin: '0 0 14px 0', fontSize: 13.5, lineHeight: 1.5, color: 'var(--color-neutral-700)', maxWidth: '50ch' }}>
+                This is what shows on your invoices and on anything you send to a lender.
               </p>
-            </div>
-          )}
-
-          {step === 'business' && (
-            <div>
-              <div style={kickerStyle}>Step 2 of 2</div>
-              <h1 style={headingStyle}>Tell us about the business</h1>
-              <p style={leadStyle}>This is what shows on your invoices and on anything you send to a lender.</p>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 22 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginBottom: 28 }}>
                 <Field id="ob-biz" label="Business name" type="text" placeholder="Okafor Logistics Ltd" value={bizName} onChange={setBizName} />
 
                 <div>
@@ -211,36 +207,42 @@ export default function Onboarding() {
                   </div>
                 </div>
 
-                <Field id="ob-ind" label="Industry" type="text" placeholder="Haulage and delivery" value={industry} onChange={setIndustry} />
-
-                <div className="field">
-                  <label htmlFor="ob-rc">
-                    RC number <span style={{ color: 'var(--color-neutral-500)' }}>&mdash; optional</span>
-                  </label>
-                  <input
-                    className="input"
-                    id="ob-rc"
-                    type="text"
-                    placeholder="RC 1234567"
-                    value={rcNumber}
-                    onChange={(e) => setRcNumber(e.target.value)}
-                  />
-                  <p style={{ margin: '7px 0 0 0', fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
-                    Your CAC registration number. Lenders usually ask for it, but you can add it later.
-                  </p>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+                  <div className="field" style={{ flex: '1 1 220px' }}>
+                    <label htmlFor="ob-ind">Business sector</label>
+                    <select className="input" id="ob-ind" value={sector} onChange={(e) => setSector(e.target.value)}>
+                      {SECTORS.map((s) => (
+                        <option key={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="field" style={{ flex: '1 1 180px' }}>
+                    <label htmlFor="ob-rc">
+                      RC number <span style={{ color: 'var(--color-neutral-500)' }}>&mdash; optional</span>
+                    </label>
+                    <input
+                      className="input"
+                      id="ob-rc"
+                      type="text"
+                      placeholder="RC 1234567"
+                      value={rcNumber}
+                      onChange={(e) => setRcNumber(e.target.value)}
+                    />
+                  </div>
                 </div>
+                <p style={{ margin: 0, fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
+                  RC is your CAC registration number. Lenders usually ask for it, but you can add it later.
+                </p>
               </div>
 
-              {/* TODO: POST to the create-business endpoint before advancing. */}
+              {/* TODO: register account + create business before advancing. */}
               <button onClick={next} className="btn btn-primary btn-block blueprint" style={{ position: 'relative' }}>
                 {cornerMarks}
-                Continue
+                Create my account
               </button>
-              <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
-                <button onClick={back} className="btn btn-ghost" style={{ fontSize: 13 }}>
-                  Back
-                </button>
-              </div>
+              <p style={{ margin: '14px 0 0 0', fontSize: 12.5, color: 'var(--color-neutral-600)', textAlign: 'center' }}>
+                Already have an account? <a href="#">Sign in</a>
+              </p>
             </div>
           )}
 
@@ -306,6 +308,13 @@ const kickerStyle: CSSProperties = {
   marginBottom: 10,
 }
 
+const sectionKickerStyle: CSSProperties = {
+  fontSize: 11.5,
+  letterSpacing: '0.16em',
+  textTransform: 'uppercase',
+  color: 'var(--color-neutral-600)',
+}
+
 const headingStyle: CSSProperties = {
   fontFamily: 'var(--font-heading)',
   fontWeight: 600,
@@ -329,11 +338,12 @@ interface FieldProps {
   placeholder: string
   value: string
   onChange: (value: string) => void
+  flex?: string
 }
 
-function Field({ id, label, type, placeholder, value, onChange }: FieldProps) {
+function Field({ id, label, type, placeholder, value, onChange, flex }: FieldProps) {
   return (
-    <div className="field">
+    <div className="field" style={flex ? { flex } : undefined}>
       <label htmlFor={id}>{label}</label>
       <input
         className="input"
