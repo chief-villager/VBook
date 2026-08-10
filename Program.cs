@@ -126,7 +126,7 @@ if (app.Environment.IsDevelopment())
 
 app.UseAuthentication();
 app.UseAuthorization();
-app.UseCors("LocalhostPolicy");
+app.UseCors();
 app.MapControllers();
 
 app.Run();

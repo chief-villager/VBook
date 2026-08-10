@@ -1,0 +1,18 @@
+/* Page-level styles. Design tokens + component classes come from
+   ./styles/industry.css (the Claude Design system's source of truth). */
+body {
+  margin: 0;
+  background: var(--color-bg);
+}
+a {
+  color: var(--color-accent-700);
+}
+a:hover {
+  color: var(--color-accent-800);
+}
+
+/* Hover affordance for the unselected business-type chips (the design used
+   style-hover; inline styles set the resting border, so override on hover). */
+.biz-type:hover {
+  border-color: var(--color-accent) !important;
+}
