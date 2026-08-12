@@ -29,6 +29,17 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
   auth?: boolean
 }
 
+// Controllers report expected failures as `{ error }` and unexpected ones may carry
+// `{ message }`; pull whichever is present so callers get a human-readable reason.
+function errorMessage(payload: unknown, status: number): string {
+  if (payload && typeof payload === 'object') {
+    const { message, error } = payload as { message?: unknown; error?: unknown }
+    if (typeof message === 'string') return message
+    if (typeof error === 'string') return error
+  }
+  return `Request failed with ${status}`
+}
+
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const { body, auth = true, headers, ...rest } = options
 
@@ -50,11 +61,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   const payload = isJson ? await response.json().catch(() => undefined) : await response.text()
 
   if (!response.ok) {
-    const message =
-      (isJson && payload && typeof payload === 'object' && 'message' in payload
-        ? String((payload as { message: unknown }).message)
-        : undefined) ?? `Request failed with ${response.status}`
-    throw new ApiError(response.status, message, payload)
+    throw new ApiError(response.status, errorMessage(payload, response.status), payload)
   }
 
   return payload as T
