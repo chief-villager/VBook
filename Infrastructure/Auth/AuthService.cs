@@ -39,7 +39,10 @@ public sealed class AuthService : IAuthService
     public async Task<Result> CreateCredentialsAsync(UserId userId, string email, string password, CancellationToken ct = default)
     {
         // Id == the domain user's id: this shared Guid is the link (no FK).
-        var principal = new ApplicationUser { Id = userId.Value, UserName = email, Email = email };
+        // Email is confirmed on creation: there's no email sender wired to deliver a
+        // confirmation link, and the sign-in gate requires a confirmed email — so
+        // without this, no registered user could ever log in.
+        var principal = new ApplicationUser { Id = userId.Value, UserName = email, Email = email, EmailConfirmed = true };
 
         // With AutoSaveChanges disabled on the store, this validates and hashes the
         // password and *tracks* the principal without hitting the database.
@@ -88,6 +91,17 @@ public sealed class AuthService : IAuthService
         var principal = await _users.FindByEmailAsync(email);
         if (principal is null || !await _users.CheckPasswordAsync(principal, password))
             return Result<string>.Failure("Invalid credentials.");
+
+        // Require a confirmed email before issuing a token. No emailer is wired, so the
+        // confirmation link is reissued and surfaced in the failure (same dev convention
+        // as the password-reset / email-confirmation endpoints) rather than sent out of band.
+        if (!await _users.IsEmailConfirmedAsync(principal))
+        {
+            var confirmation = await GetEmailConfirmationTokenAsync(email, ct);
+            return confirmation.IsSuccess
+                ? Result<string>.Failure($"Confirm your email before signing in: {confirmation.Value}")
+                : Result<string>.Failure("Confirm your email before signing in.");
+        }
 
         // Stamp each business role the user holds into the token so authorization can
         // scope decisions per business (the shared Guid links principal to domain user).
