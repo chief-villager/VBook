@@ -1,6 +1,8 @@
+using Bookkeeping.Application.Abstractions;
 using Bookkeeping.Application.Identity;
 using Bookkeeping.Domain.Common;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Bookkeeping.Infrastructure.Auth;
@@ -11,17 +13,23 @@ public sealed class AuthService : IAuthService
     private readonly ITokenIssuer _tokens;
     private readonly IIdentityRepository _identity;
     private readonly IOptions<Hosting> _hosting;
+    private readonly IEmailSender _email;
+    private readonly ILogger<AuthService> _logger;
 
     public AuthService(
-    UserManager<ApplicationUser> users, 
-    ITokenIssuer tokens, 
-    IIdentityRepository identity, 
-    IOptions<Hosting> hosting)
+    UserManager<ApplicationUser> users,
+    ITokenIssuer tokens,
+    IIdentityRepository identity,
+    IOptions<Hosting> hosting,
+    IEmailSender email,
+    ILogger<AuthService> logger)
     {
         _users = users;
         _tokens = tokens;
         _identity = identity;
         _hosting = hosting;
+        _email = email;
+        _logger = logger;
     }
 
     public async Task<Result<bool>> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken ct = default)
@@ -38,11 +46,11 @@ public sealed class AuthService : IAuthService
 
     public async Task<Result> CreateCredentialsAsync(UserId userId, string email, string password, CancellationToken ct = default)
     {
-        // Id == the domain user's id: this shared Guid is the link (no FK).
-        // Email is confirmed on creation: there's no email sender wired to deliver a
-        // confirmation link, and the sign-in gate requires a confirmed email — so
-        // without this, no registered user could ever log in.
-        var principal = new ApplicationUser { Id = userId.Value, UserName = email, Email = email, EmailConfirmed = true };
+        // Id == the domain user's id: this shared Guid is the link (no FK). The account
+        // starts with an *unconfirmed* email; the confirmation link is sent once the
+        // registration transaction has committed (SendEmailConfirmationAsync, called from
+        // IdentityService), and SignInAsync denies sign-in until the user confirms.
+        var principal = new ApplicationUser { Id = userId.Value, UserName = email, Email = email };
 
         // With AutoSaveChanges disabled on the store, this validates and hashes the
         // password and *tracks* the principal without hitting the database.
@@ -61,6 +69,33 @@ public sealed class AuthService : IAuthService
         var token = await _users.GenerateEmailConfirmationTokenAsync(principal);
         var callbackurl = $"{_hosting.Value.Urls}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
         return Result<string>.Success(callbackurl);
+    }
+
+    public async Task<Result> SendEmailConfirmationAsync(string email, CancellationToken ct = default)
+    {
+        var link = await GetEmailConfirmationTokenAsync(email, ct);
+        if (link.IsFailure)
+            return Result.Failure(link.Error);
+
+        var body = $"""
+            <p>Welcome to Vbook.</p>
+            <p>Confirm your email address to activate your account:</p>
+            <p><a href="{link.Value}">Confirm my email</a></p>
+            <p>If you didn't create this account, you can ignore this message.</p>
+            """;
+
+        try
+        {
+            await _email.SendAsync(email, "Confirm your Vbook email", body, ct);
+            return Result.Success();
+        }
+        catch (Exception ex)
+        {
+            // Best-effort: never fail a committed registration (or a sign-in attempt)
+            // because delivery hiccuped. The link is reissued on the next sign-in.
+            _logger.LogWarning(ex, "Failed to send confirmation email to {Email}", email);
+            return Result.Failure("Could not send the confirmation email.");
+        }
     }
     public async Task<Result<bool>> ConfirmEmailAsync(string email, string token, CancellationToken ct = default)
     {
@@ -92,15 +127,12 @@ public sealed class AuthService : IAuthService
         if (principal is null || !await _users.CheckPasswordAsync(principal, password))
             return Result<string>.Failure("Invalid credentials.");
 
-        // Require a confirmed email before issuing a token. No emailer is wired, so the
-        // confirmation link is reissued and surfaced in the failure (same dev convention
-        // as the password-reset / email-confirmation endpoints) rather than sent out of band.
+        // Deny sign-in until the email is confirmed, and re-send the confirmation link
+        // so a user who lost the original can still complete it.
         if (!await _users.IsEmailConfirmedAsync(principal))
         {
-            var confirmation = await GetEmailConfirmationTokenAsync(email, ct);
-            return confirmation.IsSuccess
-                ? Result<string>.Failure($"Confirm your email before signing in: {confirmation.Value}")
-                : Result<string>.Failure("Confirm your email before signing in.");
+            await SendEmailConfirmationAsync(email, ct);
+            return Result<string>.Failure("Please confirm your email before signing in. We've sent you a fresh confirmation link.");
         }
 
         // Stamp each business role the user holds into the token so authorization can

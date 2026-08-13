@@ -48,6 +48,10 @@ public sealed class IdentityService : IIdentityService
 
         // One physical write: domain User + ApplicationUser credentials + any domain events.
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link now the account is committed (best-effort — a
+        // delivery failure doesn't undo the registration).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return user.Id;
     }
 
@@ -101,6 +105,9 @@ public sealed class IdentityService : IIdentityService
         await _repository.AddMembershipAsync(membership, ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link now the account is committed (best-effort).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return new BusinessRegistrationResult(user.Id, business.Id);
     }
 
@@ -134,6 +141,9 @@ public sealed class IdentityService : IIdentityService
         await _repository.AddMembershipAsync(membership, ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link so the new member can activate and sign in (best-effort).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return user.Id;
     }
 

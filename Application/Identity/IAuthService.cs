@@ -16,4 +16,9 @@ public interface IAuthService
     Task<Result<string>> SignInAsync(string email, string password, CancellationToken ct = default);
     Task<Result<bool>> ConfirmEmailAsync(string email, string token, CancellationToken ct = default);
     Task<Result<string>> GetEmailConfirmationTokenAsync(string email, CancellationToken ct = default);
+
+    // Generates a fresh confirmation link for the user and emails it. Best-effort:
+    // a delivery failure is reported via Result but never throws, so it can't roll
+    // back a committed registration. Call after the account is persisted.
+    Task<Result> SendEmailConfirmationAsync(string email, CancellationToken ct = default);
 }
