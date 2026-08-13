@@ -4,11 +4,15 @@
 // form. Visuals come from the design system in src/styles/industry.css (blueprint
 // cards, corner marks, tokens).
 //
-// Inputs are controlled so the values are ready to POST to the Identity endpoints;
-// wiring to the API is left as a TODO — "Create my account" just advances the flow,
-// matching the original prototype.
+// Inputs are controlled and "Create my account" POSTs them to the Identity
+// combined-signup endpoint (owner + business in one transaction), then signs the
+// new owner straight in so the dashboard has a bearer token.
 
 import { useState, type CSSProperties } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { ApiError } from '../lib/api'
+import { setAccessToken } from '../lib/auth'
+import { BUSINESS_SECTORS, login, registerBusinessWithOwner, type BusinessSector } from '../lib/identity'
 
 type Step = 'setup' | 'done'
 
@@ -18,7 +22,9 @@ const LABELS: { id: Step; label: string }[] = [
   { id: 'done', label: 'Finished' },
 ]
 const BIZ_TYPES = ['Sole trader', 'Limited company', 'Partnership', 'Not registered yet']
-const SECTORS = ['Retail', 'Wholesale', 'Manufacturing', 'Agriculture', 'Services', 'Hospitality', 'Transport', 'Other']
+// The sector list is owned by the identity module so its order stays locked to the
+// API's BusinessSector enum (we submit the index, not the name).
+const SECTORS = BUSINESS_SECTORS
 
 const DONE_ITEMS = [
   'Connect a bank account from the dashboard to start your records automatically',
@@ -36,6 +42,7 @@ const cornerMarks = (
 )
 
 export default function Onboarding() {
+  const navigate = useNavigate()
   const [step, setStep] = useState<Step>('setup')
 
   // Account fields
@@ -47,12 +54,44 @@ export default function Onboarding() {
   // Business fields
   const [bizName, setBizName] = useState('')
   const [bizType, setBizType] = useState('Limited company')
-  const [sector, setSector] = useState(SECTORS[0])
+  const [sector, setSector] = useState<BusinessSector>(SECTORS[0])
   const [rcNumber, setRcNumber] = useState('')
 
+  // Submission state for the combined-signup call.
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
   const currentIndex = ORDER.indexOf(step)
-  const next = () => setStep(ORDER[Math.min(currentIndex + 1, ORDER.length - 1)])
   const restart = () => setStep('setup')
+
+  // phone, bizType, and rcNumber are collected for the UX but have no home in the
+  // current register endpoint, so they stay client-side until the API grows fields.
+  async function handleCreateAccount() {
+    setError(null)
+    if (!name.trim() || !email.trim() || !password || !bizName.trim()) {
+      setError('Please enter your name, email, password, and business name.')
+      return
+    }
+
+    setSubmitting(true)
+    try {
+      await registerBusinessWithOwner({
+        email: email.trim(),
+        displayName: name.trim(),
+        password,
+        businessName: bizName.trim(),
+        sector,
+      })
+      // Sign in immediately so the dashboard has a bearer token to work with.
+      const { token } = await login(email.trim(), password)
+      setAccessToken(token)
+      setStep('done')
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div
@@ -210,7 +249,7 @@ export default function Onboarding() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
                   <div className="field" style={{ flex: '1 1 220px' }}>
                     <label htmlFor="ob-ind">Business sector</label>
-                    <select className="input" id="ob-ind" value={sector} onChange={(e) => setSector(e.target.value)}>
+                    <select className="input" id="ob-ind" value={sector} onChange={(e) => setSector(e.target.value as BusinessSector)}>
                       {SECTORS.map((s) => (
                         <option key={s}>{s}</option>
                       ))}
@@ -235,13 +274,39 @@ export default function Onboarding() {
                 </p>
               </div>
 
-              {/* TODO: register account + create business before advancing. */}
-              <button onClick={next} className="btn btn-primary btn-block blueprint" style={{ position: 'relative' }}>
+              {error && (
+                <p
+                  role="alert"
+                  style={{
+                    margin: '0 0 14px 0',
+                    fontSize: 13,
+                    lineHeight: 1.5,
+                    color: 'var(--color-danger, #b42318)',
+                  }}
+                >
+                  {error}
+                </p>
+              )}
+              <button
+                onClick={handleCreateAccount}
+                disabled={submitting}
+                className="btn btn-primary btn-block blueprint"
+                style={{ position: 'relative', opacity: submitting ? 0.7 : 1 }}
+              >
                 {cornerMarks}
-                Create my account
+                {submitting ? 'Creating your account…' : 'Create my account'}
               </button>
               <p style={{ margin: '14px 0 0 0', fontSize: 12.5, color: 'var(--color-neutral-600)', textAlign: 'center' }}>
-                Already have an account? <a href="#">Sign in</a>
+                Already have an account?{' '}
+                <a
+                  href="/signin"
+                  onClick={(e) => {
+                    e.preventDefault()
+                    navigate('/signin')
+                  }}
+                >
+                  Sign in
+                </a>
               </p>
             </div>
           )}
@@ -282,8 +347,11 @@ export default function Onboarding() {
                 ))}
               </div>
 
-              {/* TODO: route to the dashboard once it exists. */}
-              <button className="btn btn-primary btn-block blueprint" style={{ position: 'relative' }}>
+              <button
+                onClick={() => navigate('/dashboard')}
+                className="btn btn-primary btn-block blueprint"
+                style={{ position: 'relative' }}
+              >
                 {cornerMarks}
                 Go to my dashboard
               </button>

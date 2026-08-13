@@ -6,6 +6,9 @@ dist/
 dist-ssr/
 *.tsbuildinfo
 
+# Vite local cache
+.vite/
+
 # Local env (never commit real values)
 .env
 .env.local
