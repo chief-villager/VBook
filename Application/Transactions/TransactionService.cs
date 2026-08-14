@@ -52,6 +52,21 @@ public sealed class TransactionService : ITransactionService
     public async Task<IReadOnlyList<TransactionSummary>> ListAsync(BusinessId businessId, DateRange period, CancellationToken ct = default)
     {
         var transactions = await _repository.ListAsync(businessId, period, ct);
+        return await ToSummariesAsync(transactions, ct);
+    }
+
+    public async Task<PagedResult<TransactionSummary>> ListPagedAsync(
+        BusinessId businessId, DateRange period, PageRequest page, CancellationToken ct = default)
+    {
+        var pageResult = await _repository.ListPagedAsync(businessId, period, page, ct);
+        var items = await ToSummariesAsync(pageResult.Items, ct);
+        return new PagedResult<TransactionSummary>(items, pageResult.Page, pageResult.PageSize, pageResult.TotalCount);
+    }
+
+    // Resolves each transaction's category name (shared reference data) into a summary.
+    private async Task<IReadOnlyList<TransactionSummary>> ToSummariesAsync(
+        IReadOnlyList<Transaction> transactions, CancellationToken ct)
+    {
         var categories = (await _repository.GetCategoriesAsync(ct))
             .ToDictionary(c => c.Id, c => c.Name);
 

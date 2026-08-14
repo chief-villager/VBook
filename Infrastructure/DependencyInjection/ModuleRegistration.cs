@@ -9,6 +9,7 @@ using Bookkeeping.Domain.Invoices.Events;
 using Bookkeeping.Domain.Transactions.Events;
 using Bookkeeping.Infrastructure.Auth;
 using Bookkeeping.Infrastructure.Documents;
+using Bookkeeping.Infrastructure.Email;
 using Bookkeeping.Infrastructure.Mono;
 using Bookkeeping.Infrastructure.Persistence;
 using Bookkeeping.Infrastructure.Persistence.Configurations;
@@ -41,6 +42,15 @@ public static class ModuleRegistration
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
+        // Persists and rotates refresh tokens (auth schema); backs login/refresh/logout.
+        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
+
+        // Outbound email (SMTP) for confirmation links, bound + validated at startup.
+        services.AddOptions<SmtpOptions>()
+            .BindConfiguration(SmtpOptions.SectionName)
+            .ValidateDataAnnotations()
+            .ValidateOnStart();
+        services.AddScoped<IEmailSender, SmtpEmailSender>();
 
         // Permission-based authorization, scoped per business. The policy provider turns
         // a permission name used as a policy into a PermissionRequirement, and the handler

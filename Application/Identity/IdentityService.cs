@@ -48,27 +48,11 @@ public sealed class IdentityService : IIdentityService
 
         // One physical write: domain User + ApplicationUser credentials + any domain events.
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link now the account is committed (best-effort — a
+        // delivery failure doesn't undo the registration).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return user.Id;
-    }
-
-    public async Task<Result<BusinessId>> RegisterBusinessAsync(UserId ownerId, string name, BusinessSector sector, CancellationToken ct = default)
-    {
-        var owner = await _repository.GetUserAsync(ownerId, ct);
-        if (owner is null)
-            return Result<BusinessId>.Failure("Owner not found.");
-
-        if (string.IsNullOrWhiteSpace(name))
-            return Result<BusinessId>.Failure("Business name is required.");
-
-        var business = Business.Register(ownerId, name.Trim(), sector);
-        await _repository.AddAsync(business, ct);
-
-        // Every business has exactly one owner membership; the registering user gets it.
-        var membership = BusinessMembership.Create(business.Id, ownerId, BusinessRole.Owner);
-        await _repository.AddMembershipAsync(membership, ct);
-
-        await _unitOfWork.SaveChangesAsync(ct);
-        return business.Id;
     }
 
     public async Task<Result<BusinessRegistrationResult>> RegisterBusinessWithOwnerAsync(
@@ -101,6 +85,9 @@ public sealed class IdentityService : IIdentityService
         await _repository.AddMembershipAsync(membership, ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link now the account is committed (best-effort).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return new BusinessRegistrationResult(user.Id, business.Id);
     }
 
@@ -134,6 +121,9 @@ public sealed class IdentityService : IIdentityService
         await _repository.AddMembershipAsync(membership, ct);
 
         await _unitOfWork.SaveChangesAsync(ct);
+
+        // Send the confirmation link so the new member can activate and sign in (best-effort).
+        await _authService.SendEmailConfirmationAsync(user.Email, ct);
         return user.Id;
     }
 

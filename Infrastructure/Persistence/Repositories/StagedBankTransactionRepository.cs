@@ -1,3 +1,4 @@
+using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Transactions;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Transactions;
@@ -13,12 +14,24 @@ public sealed class StagedBankTransactionRepository
     public Task<StagedBankTransaction?> GetAsync(StagedTransactionId id, CancellationToken ct = default)
         => Set.FirstOrDefaultAsync(s => s.Id == id, ct);
 
-    public async Task<IReadOnlyList<StagedBankTransaction>> ListAsync(
-        BusinessId businessId, StagedTransactionStatus status, CancellationToken ct = default)
-        => await Set
-            .Where(s => s.BusinessId == businessId && s.Status == status)
-            .OrderBy(s => s.OccurredOn)
+    public async Task<PagedResult<StagedBankTransaction>> ListAsync(
+        BusinessId businessId, StagedTransactionStatus status, PageRequest page, CancellationToken ct = default)
+    {
+        var query = Set.Where(s => s.BusinessId == businessId && s.Status == status);
+
+        var total = await query.CountAsync(ct);
+
+        // Newest first; Id is the tiebreaker so paging is deterministic when several
+        // rows share an OccurredOn date.
+        var items = await query
+            .OrderByDescending(s => s.OccurredOn)
+            .ThenByDescending(s => s.Id)
+            .Skip(page.Skip)
+            .Take(page.PageSize)
             .ToListAsync(ct);
+
+        return new PagedResult<StagedBankTransaction>(items, page.Page, page.PageSize, total);
+    }
 
     public async Task<HashSet<string>> ExistingExternalIdsAsync(
         BusinessId businessId, IEnumerable<string> externalIds, CancellationToken ct = default)

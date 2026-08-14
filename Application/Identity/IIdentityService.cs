@@ -6,7 +6,6 @@ namespace Bookkeeping.Application.Identity;
 public interface IIdentityService
 {
     Task<Result<UserId>> RegisterUserAsync(string email, string displayName, string password, CancellationToken ct = default);
-    Task<Result<BusinessId>> RegisterBusinessAsync(UserId ownerId, string name, BusinessSector sector, CancellationToken ct = default);
 
     // Creates the owner and their business in a single transaction, assigning the
     // owner an Owner membership.

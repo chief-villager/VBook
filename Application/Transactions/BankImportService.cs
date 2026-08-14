@@ -52,22 +52,25 @@ public sealed class BankImportService : IBankImportService
         return new BankImportSummary(Imported: fresh.Count, Skipped: feed.Count - fresh.Count);
     }
 
-    public async Task<IReadOnlyList<StagedTransactionDto>> ListAsync(
-        BusinessId businessId, StagedTransactionStatus status, CancellationToken ct = default)
+    public async Task<PagedResult<StagedTransactionDto>> ListAsync(
+        BusinessId businessId, StagedTransactionStatus status, PageRequest page, CancellationToken ct = default)
     {
-        var staged = await _staged.ListAsync(businessId, status, ct);
-        return staged
+        var staged = await _staged.ListAsync(businessId, status, page, ct);
+        var items = staged.Items
             .Select(s => new StagedTransactionDto(
                 s.Id, s.Amount, s.OccurredOn, s.Narration, s.ProviderCategory,
                 s.SuggestedType, s.CategoryId, s.Status, s.RecordedTransactionId))
             .ToList();
+
+        return new PagedResult<StagedTransactionDto>(items, staged.Page, staged.PageSize, staged.TotalCount);
     }
 
-    public async Task<Result> CategoriseAsync(StagedTransactionId id, CategoryId categoryId, CancellationToken ct = default)
+    public async Task<Result> CategoriseAsync(BusinessId businessId, StagedTransactionId id, CategoryId categoryId, CancellationToken ct = default)
     {
-        var staged = await _staged.GetAsync(id, ct);
-        if (staged is null)
-            return Result.Failure("Staged import not found.");
+        var found = ResourceOwnership.RequireOwned(await _staged.GetAsync(id, ct), businessId, "Staged import");
+        if (found.IsFailure)
+            return Result.Failure(found.Error);
+        var staged = found.Value;
 
         var category = await _transactions.GetCategoryAsync(categoryId, ct);
         if (category is null)
@@ -86,11 +89,13 @@ public sealed class BankImportService : IBankImportService
     // TransactionRecorded event (→ balanced journal entry), and the staged status
     // flip all commit in a single SaveChanges, so approval is atomic: no orphaned
     // Transaction and no double-record if the process dies mid-way.
-    public async Task<Result<TransactionId>> ApproveAsync(StagedTransactionId id, CancellationToken ct = default)
+    public async Task<Result<TransactionId>> ApproveAsync(BusinessId businessId, StagedTransactionId id, CancellationToken ct = default)
     {
-        var staged = await _staged.GetAsync(id, ct);
-        if (staged is null)
-            return Result<TransactionId>.Failure("Staged import not found.");
+        var found = ResourceOwnership.RequireOwned(await _staged.GetAsync(id, ct), businessId, "Staged import");
+        if (found.IsFailure)
+            return Result<TransactionId>.Failure(found.Error);
+        var staged = found.Value;
+
         if (staged.CategoryId is null)
             return Result<TransactionId>.Failure("Assign a category before approving.");
 
@@ -115,11 +120,12 @@ public sealed class BankImportService : IBankImportService
         return record.Value.Id;
     }
 
-    public async Task<Result> DiscardAsync(StagedTransactionId id, CancellationToken ct = default)
+    public async Task<Result> DiscardAsync(BusinessId businessId, StagedTransactionId id, CancellationToken ct = default)
     {
-        var staged = await _staged.GetAsync(id, ct);
-        if (staged is null)
-            return Result.Failure("Staged import not found.");
+        var found = ResourceOwnership.RequireOwned(await _staged.GetAsync(id, ct), businessId, "Staged import");
+        if (found.IsFailure)
+            return Result.Failure(found.Error);
+        var staged = found.Value;
 
         var result = staged.Discard();
         if (result.IsFailure)

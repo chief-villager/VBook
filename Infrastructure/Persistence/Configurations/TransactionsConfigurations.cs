@@ -40,7 +40,8 @@ public sealed class CategoryConfiguration : IEntityTypeConfiguration<Category>
             Row(6, "Utilities",    TransactionType.Expense),
             Row(7, "Wages",        TransactionType.Expense),
             Row(8, "Owner investment", TransactionType.Capital),
-            Row(9, "Bank loan",        TransactionType.Loan));
+            Row(9, "Bank loan",        TransactionType.Loan),
+            Row(10, "Other Expenses", TransactionType.Expense));
     }
 }
 

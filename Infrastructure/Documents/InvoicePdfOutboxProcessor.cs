@@ -71,7 +71,7 @@ public sealed class InvoicePdfOutboxProcessor : BackgroundService
 
         try
         {
-            var detail = await sp.GetRequiredService<IInvoiceService>().GetAsync(job.InvoiceId, ct)
+            var detail = await sp.GetRequiredService<IInvoiceService>().GetAsync(job.BusinessId, job.InvoiceId, ct)
                 ?? throw new InvalidOperationException($"Invoice {job.InvoiceId.Value} not found.");
 
             var template = await sp.GetRequiredService<IIdentityService>()
