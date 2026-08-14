@@ -125,3 +125,25 @@ export const patch = <T>(path: string, body?: unknown, options?: ApiOptions) =>
 
 export const del = <T>(path: string, options?: ApiOptions) =>
   api<T>(path, { ...options, method: 'DELETE' })
+
+// Fetches a binary response (e.g. a generated PDF) as a Blob, with the same bearer
+// auth and refresh-on-401 replay as api(). Kept separate because api() assumes a
+// JSON/text body.
+export async function getBlob(path: string, options: ApiOptions = {}): Promise<Blob> {
+  const { auth = true, headers, _retry } = options
+
+  const finalHeaders = new Headers(headers)
+  if (auth) {
+    const token = getAccessToken()
+    if (token) finalHeaders.set('Authorization', `Bearer ${token}`)
+  }
+
+  const response = await fetch(`${BASE_URL}${path}`, { method: 'GET', headers: finalHeaders })
+
+  if (response.status === 401 && auth && !_retry && getRefreshToken()) {
+    if (await attemptRefresh()) return getBlob(path, { ...options, _retry: true })
+  }
+
+  if (!response.ok) throw new ApiError(response.status, `Request failed with ${response.status}`)
+  return response.blob()
+}

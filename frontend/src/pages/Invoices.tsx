@@ -1,23 +1,58 @@
-// Invoices — React port of the "invoices" section of "Vbook.dc.html". Two tabs:
-// "New invoice" (a live invoice builder — customer, editable line items, a 7.5% VAT
-// toggle, running totals) and "All invoices" (a status-coloured list of past ones).
+// Invoices — React port of the "invoices" section of "Vbook.dc.html", wired to the
+// live API. Two tabs:
+//   "New invoice" — a live builder (customer, editable line items, a 7.5% VAT toggle,
+//     running totals) that POSTs to create the invoice.
+//   "All invoices" — the business's invoices (GET, paged), each with a PDF download
+//     and, while unpaid, a "Mark paid" action.
 //
-// Visuals come from src/styles/industry.css. Data is the prototype's own mock set so
-// the page renders standalone; TODOs mark the real Invoices endpoints:
-//   Send / Download PDF / Save as draft -> POST create invoice (raises InvoiceCreated
-//     -> PDF outbox), then the returned PdfUrl for download
-//   All invoices list -> GET the business's invoices
+// Visuals come from src/styles/industry.css. The backend has no per-invoice email or
+// note and no draft/sent states (an invoice is Pending until Paid), so those form
+// fields are presentational and the actions map to create / mark-paid / download.
 
-import { useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import AppShell from '../components/AppShell.tsx'
+import { ApiError } from '../lib/api'
+import { getBusinessId } from '../lib/auth'
+import {
+  createInvoice,
+  downloadInvoicePdf,
+  InvoiceStatus,
+  listInvoices,
+  markInvoicePaid,
+  type InvoiceSummary,
+  type Paged,
+} from '../lib/invoices'
 
-const BUSINESS_NAME = 'Okafor Logistics Ltd'
+const BUSINESS_NAME = 'Your business'
 const NAIRA = '₦'
 const MINUS = '−'
 const VAT_RATE = 0.075
+const LIST_PAGE_SIZE = 100
 
 // "₦1,200" / "−₦900".
 const amt = (n: number) => (n < 0 ? MINUS : '') + NAIRA + Math.abs(n).toLocaleString('en-NG')
+const num = (s: string) => Number(s) || 0
+const digitsOnly = (s: string) => s.replace(/[^0-9]/g, '')
+
+// Local-date yyyy-MM-dd for the DateOnly API params.
+function toDateParam(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+// "2026-08-28" -> "28 Aug", parsed locally so the day never shifts across a timezone.
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+}
+
+const startOfToday = () => {
+  const n = new Date()
+  return new Date(n.getFullYear(), n.getMonth(), n.getDate())
+}
 
 interface LineItem {
   desc: string
@@ -25,49 +60,26 @@ interface LineItem {
   price: string
 }
 
-const DEFAULT_ITEMS: LineItem[] = [
-  { desc: 'Haulage — Lagos to Ibadan, 2 trips', qty: '2', price: '185000' },
-  { desc: 'Loading and offloading', qty: '1', price: '45000' },
-]
+// The backend has only Pending/Paid; "Overdue" is derived client-side from the due date.
+type Pill = 'Paid' | 'Overdue' | 'Pending'
 
-type InvoiceStatus = 'Draft' | 'Sent' | 'Paid' | 'Overdue'
-
-interface PastInvoice {
-  no: string
-  who: string
-  issued: string
-  due: string
-  amount: number
-  status: InvoiceStatus
+function pillFor(inv: InvoiceSummary): Pill {
+  if (inv.status === InvoiceStatus.Paid) return 'Paid'
+  const [y, m, d] = inv.dueDate.split('-').map(Number)
+  if (y && new Date(y, m - 1, d) < startOfToday()) return 'Overdue'
+  return 'Pending'
 }
 
-const PAST_INVOICES: PastInvoice[] = [
-  { no: 'INV-0146', who: 'Havilah Interiors', issued: '28 Aug', due: '11 Sep', amount: 340000, status: 'Draft' },
-  { no: 'INV-0145', who: 'Lagos Freight Co', issued: '25 Aug', due: '8 Sep', amount: 780000, status: 'Sent' },
-  { no: 'INV-0144', who: 'Uche Enterprises', issued: '16 Aug', due: '30 Aug', amount: 505000, status: 'Sent' },
-  { no: 'INV-0142', who: 'Sahara Foods Ltd', issued: '9 Aug', due: '23 Aug', amount: 640000, status: 'Paid' },
-  { no: 'INV-0139', who: 'Bright Star Ventures', issued: '6 Aug', due: '20 Aug', amount: 415000, status: 'Paid' },
-  { no: 'INV-0136', who: 'Kano Traders Co', issued: '1 Aug', due: '15 Aug', amount: 890000, status: 'Paid' },
-  { no: 'INV-0131', who: 'Palm Grove Salon', issued: '28 Jul', due: '11 Aug', amount: 300000, status: 'Paid' },
-  { no: 'INV-0128', who: 'Delta Motors', issued: '12 Jul', due: '26 Jul', amount: 220000, status: 'Overdue' },
-]
-
-// Border / background / text colour per status pill.
-const statusStyle = (st: InvoiceStatus): { bg: string; color: string; border: string } => {
+const statusStyle = (st: Pill): { bg: string; color: string; border: string } => {
   switch (st) {
     case 'Paid':
       return { bg: 'var(--color-accent-100)', color: 'var(--color-accent-800)', border: 'var(--color-accent)' }
     case 'Overdue':
       return { bg: 'transparent', color: 'var(--color-text)', border: 'var(--color-text)' }
-    case 'Sent':
+    default: // Pending
       return { bg: 'transparent', color: 'var(--color-accent-700)', border: 'var(--color-accent-400)' }
-    default:
-      return { bg: 'transparent', color: 'var(--color-neutral-600)', border: 'var(--color-neutral-400)' }
   }
 }
-
-const num = (s: string) => Number(s) || 0
-const digitsOnly = (s: string) => s.replace(/[^0-9]/g, '')
 
 const cornerMarks = (
   <>
@@ -84,12 +96,27 @@ export default function Invoices() {
   const [showTerms, setShowTerms] = useState(false)
   const [view, setView] = useState<View>('create')
 
+  const businessId = useMemo(() => getBusinessId(), [])
+  const today = useMemo(() => toDateParam(new Date()), [])
+  const defaultDue = useMemo(() => toDateParam(new Date(Date.now() + 14 * 86_400_000)), [])
+
+  // New-invoice form.
+  const [invoiceNumber, setInvoiceNumber] = useState('')
   const [customer, setCustomer] = useState('')
   const [email, setEmail] = useState('')
-  const [due, setDue] = useState('11 September 2026')
+  const [due, setDue] = useState(defaultDue)
   const [note, setNote] = useState('')
   const [vat, setVat] = useState(false)
-  const [items, setItems] = useState<LineItem[]>(DEFAULT_ITEMS)
+  const [items, setItems] = useState<LineItem[]>([{ desc: '', qty: '1', price: '' }])
+  const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
+  const [formSuccess, setFormSuccess] = useState<string | null>(null)
+
+  // All-invoices list.
+  const [list, setList] = useState<Paged<InvoiceSummary> | null>(null)
+  const [listLoading, setListLoading] = useState(true)
+  const [listError, setListError] = useState<string | null>(null)
+  const [rowBusy, setRowBusy] = useState<string | null>(null)
 
   const subtotal = items.reduce((s, it) => s + num(it.qty) * num(it.price), 0)
   const vatAmount = vat ? Math.round(subtotal * VAT_RATE) : 0
@@ -97,8 +124,96 @@ export default function Invoices() {
 
   const setItem = (i: number, key: keyof LineItem, value: string) =>
     setItems((prev) => prev.map((it, n) => (n === i ? { ...it, [key]: key === 'desc' ? value : digitsOnly(value) } : it)))
-  const addItem = () => setItems((prev) => [...prev, { desc: '', qty: '1', price: '0' }])
-  const removeItem = (i: number) => setItems((prev) => prev.filter((_, n) => n !== i))
+  const addItem = () => setItems((prev) => [...prev, { desc: '', qty: '1', price: '' }])
+  const removeItem = (i: number) => setItems((prev) => (prev.length > 1 ? prev.filter((_, n) => n !== i) : prev))
+
+  function loadInvoices() {
+    if (!businessId) {
+      setListError('We could not find a business on your account.')
+      setListLoading(false)
+      return
+    }
+    setListLoading(true)
+    listInvoices(businessId, 1, LIST_PAGE_SIZE)
+      .then((data) => {
+        setList(data)
+        setListError(null)
+      })
+      .catch((err) => setListError(err instanceof ApiError ? err.message : 'Could not load your invoices.'))
+      .finally(() => setListLoading(false))
+  }
+
+  useEffect(() => {
+    loadInvoices()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId])
+
+  async function submitInvoice() {
+    setFormError(null)
+    setFormSuccess(null)
+    if (!businessId) {
+      setFormError('We could not find a business on your account.')
+      return
+    }
+    const lineItems = items
+      .map((it) => ({ description: it.desc.trim(), quantity: num(it.qty), unitPrice: num(it.price) }))
+      .filter((li) => li.description && li.quantity > 0)
+
+    if (!invoiceNumber.trim()) return setFormError('Give the invoice a number.')
+    if (!customer.trim()) return setFormError('Add who the invoice is for.')
+    if (lineItems.length === 0) return setFormError('Add at least one line with a description and quantity.')
+
+    setSubmitting(true)
+    try {
+      await createInvoice(businessId, {
+        invoiceNumber: invoiceNumber.trim(),
+        issueDate: today,
+        dueDate: due,
+        billTo: customer.trim(),
+        vatRate: vat ? VAT_RATE : 0,
+        lineItems,
+      })
+      setFormSuccess(`Invoice ${invoiceNumber.trim()} created.`)
+      setInvoiceNumber('')
+      setCustomer('')
+      setEmail('')
+      setNote('')
+      setVat(false)
+      setItems([{ desc: '', qty: '1', price: '' }])
+      loadInvoices()
+      setView('list')
+    } catch (err) {
+      setFormError(err instanceof ApiError ? err.message : 'Could not create the invoice.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  async function markPaid(inv: InvoiceSummary) {
+    if (!businessId || rowBusy) return
+    setRowBusy(inv.id.value)
+    setListError(null)
+    try {
+      await markInvoicePaid(businessId, inv.id.value)
+      loadInvoices()
+    } catch (err) {
+      setListError(err instanceof ApiError ? err.message : 'Could not mark that invoice paid.')
+    } finally {
+      setRowBusy(null)
+    }
+  }
+
+  async function download(inv: InvoiceSummary) {
+    if (!businessId) return
+    setListError(null)
+    try {
+      await downloadInvoicePdf(businessId, inv.id.value, inv.invoiceNumber)
+    } catch (err) {
+      setListError(err instanceof ApiError ? err.message : 'Could not download that PDF.')
+    }
+  }
+
+  const invoices = list?.items ?? []
 
   return (
     <AppShell
@@ -112,7 +227,11 @@ export default function Invoices() {
         {/* Tabs */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 7 }}>
           <TabButton label="New invoice" active={view === 'create'} onClick={() => setView('create')} />
-          <TabButton label="All invoices" active={view === 'list'} onClick={() => setView('list')} />
+          <TabButton
+            label={`All invoices${list ? ` (${list.totalCount})` : ''}`}
+            active={view === 'list'}
+            onClick={() => setView('list')}
+          />
         </div>
 
         {view === 'create' && (
@@ -122,38 +241,11 @@ export default function Invoices() {
               <div>
                 <div style={fieldGroupLabel}>Your details</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-start' }}>
-                  {/* TODO: upload logo -> logos/{businessId}/... via the Identity endpoint. */}
-                  <button
-                    style={{
-                      width: 88,
-                      height: 88,
-                      flex: '0 0 88px',
-                      border: '1px dashed var(--color-neutral-400)',
-                      background: 'transparent',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 5,
-                      fontFamily: 'var(--font-body)',
-                      fontSize: 11.5,
-                      color: 'var(--color-neutral-600)',
-                    }}
-                  >
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 5v14" />
-                      <path d="M5 12h14" />
-                    </svg>
-                    Add logo
-                  </button>
                   <div style={{ flex: '1 1 240px', minWidth: 200, display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14, lineHeight: 1.5 }}>
                     <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 18 }}>{BUSINESS_NAME}</span>
-                    <span style={{ color: 'var(--color-neutral-700)' }}>RC 1234567 &middot; 14 Ojota Industrial Road, Lagos</span>
-                    <span style={{ color: 'var(--color-neutral-700)' }}>hello@okaforlogistics.ng &middot; 0803 000 0000</span>
-                    <button className="btn btn-ghost" style={{ alignSelf: 'flex-start', fontSize: 13, paddingLeft: 0 }}>
-                      Edit business details
-                    </button>
+                    <span style={{ color: 'var(--color-neutral-700)' }}>
+                      Your logo and bank details come from your invoice template — set them once and every invoice uses them.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -231,79 +323,96 @@ export default function Invoices() {
                 </div>
               </div>
 
-              {/* Due + note */}
+              {/* Number, due, note */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                <div className="field" style={{ flex: '1 1 200px' }}>
-                  <label htmlFor="in-due">Payment due by</label>
-                  <input className="input" id="in-due" type="text" value={due} onChange={(e) => setDue(e.target.value)} />
+                <div className="field" style={{ flex: '1 1 160px' }}>
+                  <label htmlFor="in-no">Invoice number</label>
+                  <input className="input" id="in-no" type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="INV-0001" />
                 </div>
-                <div className="field" style={{ flex: '1 1 260px' }}>
+                <div className="field" style={{ flex: '1 1 160px' }}>
+                  <label htmlFor="in-due">Payment due by</label>
+                  <input className="input" id="in-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />
+                </div>
+                <div className="field" style={{ flex: '1 1 240px' }}>
                   <label htmlFor="in-note">Note at the bottom</label>
                   <input className="input" id="in-note" type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Thank you for your business." />
                 </div>
               </div>
 
-              {/* Actions — TODO: wire to the create-invoice endpoint. */}
+              {formError && <ErrorLine message={formError} />}
+              {formSuccess && (
+                <p style={{ margin: 0, fontSize: 13.5, color: 'var(--color-accent-800)' }} role="status">
+                  {formSuccess}
+                </p>
+              )}
+
+              {/* Actions */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', borderTop: '1px solid var(--color-divider)', paddingTop: 18 }}>
-                <button className="btn btn-primary blueprint" style={{ position: 'relative' }}>
+                <button onClick={submitInvoice} disabled={submitting} className="btn btn-primary blueprint" style={{ position: 'relative', opacity: submitting ? 0.6 : 1 }}>
                   {cornerMarks}
-                  Send
+                  {submitting ? 'Creating…' : 'Create invoice'}
                 </button>
-                <button className="btn btn-secondary">Download PDF</button>
-                <button className="btn btn-ghost" style={{ fontSize: 13.5 }}>
-                  Save as draft
-                </button>
+                <span style={{ fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
+                  Once created, download its PDF from “All invoices”.
+                </span>
               </div>
             </div>
           </div>
         )}
 
         {view === 'list' && (
-          <div className="card blueprint" style={{ position: 'relative', padding: 0 }}>
-            {cornerMarks}
-            <div style={{ overflowX: 'auto' }}>
-              <div
-                style={{
-                  display: 'flex',
-                  flexWrap: 'nowrap',
-                  gap: 16,
-                  alignItems: 'center',
-                  padding: '12px 22px',
-                  borderBottom: '1px solid var(--color-divider)',
-                  fontSize: 11.5,
-                  letterSpacing: '0.12em',
-                  textTransform: 'uppercase',
-                  color: 'var(--color-neutral-600)',
-                  minWidth: 720,
-                }}
-              >
-                <span style={{ flex: '0 0 90px' }}>Number</span>
-                <span style={{ flex: '1 1 180px', minWidth: 0 }}>Customer</span>
-                <span style={{ flex: '0 0 90px' }}>Issued</span>
-                <span style={{ flex: '0 0 90px' }}>Due</span>
-                <span style={{ flex: '0 0 100px' }}>Status</span>
-                <span style={{ flex: '0 0 130px', textAlign: 'right' }}>Amount</span>
-              </div>
-              {PAST_INVOICES.map((p) => {
-                const s = statusStyle(p.status)
-                return (
-                  <div key={p.no} style={{ display: 'flex', flexWrap: 'nowrap', gap: 16, alignItems: 'center', padding: '13px 22px', borderBottom: '1px solid var(--color-divider)', minWidth: 720 }}>
-                    <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{p.no}</span>
-                    <span style={{ flex: '1 1 180px', minWidth: 0, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.who}</span>
-                    <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{p.issued}</span>
-                    <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{p.due}</span>
-                    <span style={{ flex: '0 0 100px' }}>
-                      <span style={{ display: 'inline-block', padding: '3px 9px', fontSize: 12, border: `1px solid ${s.border}`, background: s.bg, color: s.color }}>{p.status}</span>
-                    </span>
-                    <span style={{ flex: '0 0 130px', textAlign: 'right', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 18 }}>{amt(p.amount)}</span>
+          <>
+            {listError && <ErrorLine message={listError} />}
+            {listLoading && !list ? (
+              <EmptyCard message="Loading your invoices…" />
+            ) : invoices.length > 0 ? (
+              <div className="card blueprint" style={{ position: 'relative', padding: 0, opacity: listLoading ? 0.6 : 1 }}>
+                {cornerMarks}
+                <div style={{ overflowX: 'auto' }}>
+                  <div style={{ ...listRow, ...listHead, minWidth: 900 }}>
+                    <span style={{ flex: '0 0 90px' }}>Number</span>
+                    <span style={{ flex: '1 1 180px', minWidth: 0 }}>Customer</span>
+                    <span style={{ flex: '0 0 90px' }}>Issued</span>
+                    <span style={{ flex: '0 0 90px' }}>Due</span>
+                    <span style={{ flex: '0 0 100px' }}>Status</span>
+                    <span style={{ flex: '0 0 120px', textAlign: 'right' }}>Amount</span>
+                    <span style={{ flex: '0 0 190px', textAlign: 'right' }}>Actions</span>
                   </div>
-                )
-              })}
-              <div style={{ padding: '14px 22px', fontSize: 13, color: 'var(--color-neutral-600)' }}>
-                When a payment lands in your bank, vbook matches it to the invoice and marks it Paid on its own.
+                  {invoices.map((inv) => {
+                    const pill = pillFor(inv)
+                    const s = statusStyle(pill)
+                    return (
+                      <div key={inv.id.value} style={{ ...listRow, minWidth: 900 }}>
+                        <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{inv.invoiceNumber}</span>
+                        <span style={{ flex: '1 1 180px', minWidth: 0, fontSize: 15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.billTo}</span>
+                        <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{formatDay(inv.issueDate)}</span>
+                        <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{formatDay(inv.dueDate)}</span>
+                        <span style={{ flex: '0 0 100px' }}>
+                          <span style={{ display: 'inline-block', padding: '3px 9px', fontSize: 12, border: `1px solid ${s.border}`, background: s.bg, color: s.color }}>{pill}</span>
+                        </span>
+                        <span style={{ flex: '0 0 120px', textAlign: 'right', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 18 }}>{amt(inv.totalAmount)}</span>
+                        <span style={{ flex: '0 0 190px', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
+                          <button onClick={() => download(inv)} className="btn btn-ghost" style={{ fontSize: 13 }}>
+                            PDF
+                          </button>
+                          {inv.status !== InvoiceStatus.Paid && (
+                            <button onClick={() => markPaid(inv)} disabled={rowBusy === inv.id.value} className="btn btn-secondary" style={{ fontSize: 13 }}>
+                              {rowBusy === inv.id.value ? '…' : 'Mark paid'}
+                            </button>
+                          )}
+                        </span>
+                      </div>
+                    )
+                  })}
+                  <div style={{ padding: '14px 22px', fontSize: 13, color: 'var(--color-neutral-600)' }}>
+                    When a payment lands in your bank, match it to the invoice and mark it paid here.
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            ) : (
+              <EmptyCard message="No invoices yet. Create your first one from the “New invoice” tab." />
+            )}
+          </>
         )}
       </div>
     </AppShell>
@@ -329,10 +438,44 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
   )
 }
 
+function EmptyCard({ message }: { message: string }) {
+  return (
+    <div className="card blueprint" style={{ position: 'relative', padding: 26, textAlign: 'center' }}>
+      {cornerMarks}
+      <p style={{ margin: 0, fontSize: 15, color: 'var(--color-neutral-700)' }}>{message}</p>
+    </div>
+  )
+}
+
+function ErrorLine({ message }: { message: string }) {
+  return (
+    <p style={{ margin: 0, fontSize: 13.5, color: '#b3261e' }} role="alert">
+      {message}
+    </p>
+  )
+}
+
 const fieldGroupLabel: CSSProperties = {
   fontSize: 11.5,
   letterSpacing: '0.14em',
   textTransform: 'uppercase',
   color: 'var(--color-neutral-600)',
   marginBottom: 10,
+}
+
+const listRow: CSSProperties = {
+  display: 'flex',
+  flexWrap: 'nowrap',
+  gap: 16,
+  alignItems: 'center',
+  padding: '13px 22px',
+  borderBottom: '1px solid var(--color-divider)',
+}
+
+const listHead: CSSProperties = {
+  fontSize: 11.5,
+  letterSpacing: '0.12em',
+  textTransform: 'uppercase',
+  color: 'var(--color-neutral-600)',
+  padding: '12px 22px',
 }
