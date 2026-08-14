@@ -55,26 +55,6 @@ public sealed class IdentityService : IIdentityService
         return user.Id;
     }
 
-    public async Task<Result<BusinessId>> RegisterBusinessAsync(UserId ownerId, string name, BusinessSector sector, CancellationToken ct = default)
-    {
-        var owner = await _repository.GetUserAsync(ownerId, ct);
-        if (owner is null)
-            return Result<BusinessId>.Failure("Owner not found.");
-
-        if (string.IsNullOrWhiteSpace(name))
-            return Result<BusinessId>.Failure("Business name is required.");
-
-        var business = Business.Register(ownerId, name.Trim(), sector);
-        await _repository.AddAsync(business, ct);
-
-        // Every business has exactly one owner membership; the registering user gets it.
-        var membership = BusinessMembership.Create(business.Id, ownerId, BusinessRole.Owner);
-        await _repository.AddMembershipAsync(membership, ct);
-
-        await _unitOfWork.SaveChangesAsync(ct);
-        return business.Id;
-    }
-
     public async Task<Result<BusinessRegistrationResult>> RegisterBusinessWithOwnerAsync(
         string email, string displayName, string password,
         string businessName, BusinessSector sector, CancellationToken ct = default)

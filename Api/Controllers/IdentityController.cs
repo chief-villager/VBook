@@ -107,16 +107,6 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
             : BadRequest(new { error = result.Error });
     }
 
-    [AllowAnonymous]
-    [HttpPost("api/businesses")]
-    public async Task<IActionResult> RegisterBusiness(RegisterBusinessRequest body, CancellationToken ct)
-    {
-        var result = await identity.RegisterBusinessAsync(new UserId(body.OwnerId), body.Name, body.Sector, ct);
-        return result.IsSuccess
-            ? Ok(new { businessId = result.Value.Value })
-            : BadRequest(new { error = result.Error });
-    }
-
     // Combined signup: creates the owner and their business in one transaction.
     [AllowAnonymous]
     [HttpPost("api/businesses/register")]
