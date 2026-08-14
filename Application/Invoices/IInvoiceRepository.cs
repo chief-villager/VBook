@@ -7,7 +7,9 @@ namespace Bookkeeping.Application.Invoices;
 public interface IInvoiceRepository : IGenericRepository<Invoice>
 {
     Task<Invoice?> GetAsync(InvoiceId id, CancellationToken ct = default);
-    Task<IReadOnlyList<Invoice>> ListAsync(BusinessId businessId, CancellationToken ct = default);
+
+    // One page of the business's invoices, newest first, with the total count.
+    Task<PagedResult<Invoice>> ListAsync(BusinessId businessId, PageRequest page, CancellationToken ct = default);
 
     // Invoice numbers are unique per business; the service checks this before creating.
     

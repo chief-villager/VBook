@@ -3,7 +3,7 @@ using Bookkeeping.Domain.Invoices.Events;
 
 namespace Bookkeeping.Domain.Invoices;
 
-public sealed class Invoice : AggregateRoot<InvoiceId>
+public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
 {
     private readonly List<InvoiceLineItem> _lineItems = new();
 

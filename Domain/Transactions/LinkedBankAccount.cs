@@ -7,7 +7,7 @@ public enum LinkedBankAccountStatus { Active, Unlinked }
 // A bank account a business has connected through the feed provider. Holds the
 // provider's durable account handle plus display details; unlinking is a one-way
 // status transition so the record (and its link to imported rows) is preserved.
-public sealed class LinkedBankAccount : AggregateRoot<LinkedBankAccountId>
+public sealed class LinkedBankAccount : AggregateRoot<LinkedBankAccountId>, IBusinessScoped
 {
     public BusinessId BusinessId { get; private set; }
     public string ExternalAccountId { get; private set; } = null!;  // provider's durable id

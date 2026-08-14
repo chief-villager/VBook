@@ -9,5 +9,6 @@ public interface IBankAccountService
     Task<Result<LinkedBankAccountDto>> LinkAsync(
         BusinessId businessId, string authorisationCode, CancellationToken ct = default);
     Task<IReadOnlyList<LinkedBankAccountDto>> ListAsync(BusinessId businessId, CancellationToken ct = default);
-    Task<Result> UnlinkAsync(LinkedBankAccountId id, CancellationToken ct = default);
+    // businessId scopes the resource: the account must belong to it, else "not found".
+    Task<Result> UnlinkAsync(BusinessId businessId, LinkedBankAccountId id, CancellationToken ct = default);
 }

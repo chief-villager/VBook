@@ -35,11 +35,12 @@ public sealed class InvoiceService : IInvoiceService
         return result.Value.Id;
     }
 
-    public async Task<Result> MarkAsPaidAsync(InvoiceId id, CancellationToken ct = default)
+    public async Task<Result> MarkAsPaidAsync(BusinessId businessId, InvoiceId id, CancellationToken ct = default)
     {
-        var invoice = await _repository.GetAsync(id, ct);
-        if (invoice is null)
-            return Result.Failure("Invoice not found.");
+        var found = ResourceOwnership.RequireOwned(await _repository.GetAsync(id, ct), businessId, "Invoice");
+        if (found.IsFailure)
+            return Result.Failure(found.Error);
+        var invoice = found.Value;
 
         var result = invoice.MarkAsPaid();
         if (result.IsFailure)
@@ -50,19 +51,21 @@ public sealed class InvoiceService : IInvoiceService
         return Result.Success();
     }
 
-    public async Task<InvoiceDetail?> GetAsync(InvoiceId id, CancellationToken ct = default)
+    public async Task<InvoiceDetail?> GetAsync(BusinessId businessId, InvoiceId id, CancellationToken ct = default)
     {
-        var invoice = await _repository.GetAsync(id, ct);
-        return invoice is null ? null : ToDetail(invoice);
+        var found = ResourceOwnership.RequireOwned(await _repository.GetAsync(id, ct), businessId, "Invoice");
+        return found.IsSuccess ? ToDetail(found.Value) : null;
     }
 
-    public async Task<IReadOnlyList<InvoiceSummary>> ListAsync(BusinessId businessId, CancellationToken ct = default)
+    public async Task<PagedResult<InvoiceSummary>> ListAsync(BusinessId businessId, PageRequest page, CancellationToken ct = default)
     {
-        var invoices = await _repository.ListAsync(businessId, ct);
-        return invoices
+        var invoices = await _repository.ListAsync(businessId, page, ct);
+        var items = invoices.Items
             .Select(i => new InvoiceSummary(
                 i.Id, i.InvoiceNumber, i.BillTo, i.IssueDate, i.DueDate, i.Status, i.TotalAmount))
             .ToList();
+
+        return new PagedResult<InvoiceSummary>(items, invoices.Page, invoices.PageSize, invoices.TotalCount);
     }
 
     private static InvoiceDetail ToDetail(Invoice invoice) => new(

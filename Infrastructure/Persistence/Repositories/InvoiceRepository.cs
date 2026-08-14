@@ -1,3 +1,4 @@
+using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Invoices;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Invoices;
@@ -15,11 +16,23 @@ public sealed class InvoiceRepository : GenericRepository<Invoice>, IInvoiceRepo
         return Set.FirstOrDefaultAsync(i => i.Id == id, ct);
     }
 
-    public async Task<IReadOnlyList<Invoice>> ListAsync(BusinessId businessId, CancellationToken ct = default)
-        => await Set
-            .Where(i => i.BusinessId == businessId)
+    public async Task<PagedResult<Invoice>> ListAsync(BusinessId businessId, PageRequest page, CancellationToken ct = default)
+    {
+        var query = Set.Where(i => i.BusinessId == businessId);
+
+        var total = await query.CountAsync(ct);
+
+        // Newest first; Id is the tiebreaker so paging is deterministic when several
+        // invoices share an IssueDate.
+        var items = await query
             .OrderByDescending(i => i.IssueDate)
+            .ThenByDescending(i => i.Id)
+            .Skip(page.Skip)
+            .Take(page.PageSize)
             .ToListAsync(ct);
+
+        return new PagedResult<Invoice>(items, page.Page, page.PageSize, total);
+    }
 
     public Task<bool> NumberExistsAsync(BusinessId businessId, string invoiceNumber, CancellationToken ct = default)
         => Set.AnyAsync(i => i.BusinessId == businessId && i.InvoiceNumber == invoiceNumber, ct);

@@ -8,7 +8,7 @@ public enum StagedTransactionStatus { Pending, Approved, Discarded }
 // never touches the ledger until a human categorises and approves it, at which point
 // the service promotes it into a real Transaction. Amendments are one-way status
 // transitions, not edits, so the review trail stays intact.
-public sealed class StagedBankTransaction : AggregateRoot<StagedTransactionId>
+public sealed class StagedBankTransaction : AggregateRoot<StagedTransactionId>, IBusinessScoped
 {
     public BusinessId BusinessId { get; private set; }
     public string ExternalAccountId { get; private set; } = null!;

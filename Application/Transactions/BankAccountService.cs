@@ -46,11 +46,12 @@ public sealed class BankAccountService : IBankAccountService
         return accounts.Select(ToDto).ToList();
     }
 
-    public async Task<Result> UnlinkAsync(LinkedBankAccountId id, CancellationToken ct = default)
+    public async Task<Result> UnlinkAsync(BusinessId businessId, LinkedBankAccountId id, CancellationToken ct = default)
     {
-        var account = await _accounts.GetAsync(id, ct);
-        if (account is null)
-            return Result.Failure("Linked account not found.");
+        var found = ResourceOwnership.RequireOwned(await _accounts.GetAsync(id, ct), businessId, "Linked account");
+        if (found.IsFailure)
+            return Result.Failure(found.Error);
+        var account = found.Value;
 
         // Disconnect at the provider first; only then mark it unlinked locally, so a
         // provider failure leaves our record untouched rather than falsely unlinked.

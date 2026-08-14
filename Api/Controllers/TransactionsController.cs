@@ -1,3 +1,4 @@
+using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Transactions;
 using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
@@ -31,6 +32,13 @@ public sealed class TransactionsController(ITransactionService transactions) : C
 
     [Authorize(Policy = Permissions.Transactions.Read)]
     [HttpGet("transactions")]
-    public async Task<IActionResult> List(Guid businessId, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
-        => Ok(await transactions.ListAsync(new BusinessId(businessId), new DateRange(from, to), ct));
+    public async Task<IActionResult> List(
+        Guid businessId,
+        [FromQuery] DateOnly from,
+        [FromQuery] DateOnly to,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = PageRequest.DefaultPageSize,
+        CancellationToken ct = default)
+        => Ok(await transactions.ListPagedAsync(
+            new BusinessId(businessId), new DateRange(from, to), new PageRequest(page, pageSize), ct));
 }

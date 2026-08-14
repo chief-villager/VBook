@@ -32,9 +32,9 @@ public sealed class BankAccountsController(IBankAccountService accounts) : Contr
 
     [Authorize(Policy = Permissions.BankAccounts.Manage)]
     [HttpDelete("{accountId:guid}")]
-    public async Task<IActionResult> Unlink(Guid accountId, CancellationToken ct)
+    public async Task<IActionResult> Unlink(Guid businessId, Guid accountId, CancellationToken ct)
     {
-        var result = await accounts.UnlinkAsync(new LinkedBankAccountId(accountId), ct);
+        var result = await accounts.UnlinkAsync(new BusinessId(businessId), new LinkedBankAccountId(accountId), ct);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 }

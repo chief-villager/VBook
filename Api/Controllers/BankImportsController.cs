@@ -1,3 +1,4 @@
+using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Transactions;
 using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
@@ -31,23 +32,29 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
 
     [Authorize(Policy = Permissions.BankImports.Read)]
     [HttpGet]
-    public async Task<IActionResult> List(Guid businessId, [FromQuery] StagedTransactionStatus status = StagedTransactionStatus.Pending, CancellationToken ct = default)
-        => Ok(await imports.ListAsync(new BusinessId(businessId), status, ct));
+    public async Task<IActionResult> List(
+        Guid businessId,
+        [FromQuery] StagedTransactionStatus status = StagedTransactionStatus.Pending,
+        [FromQuery] int page = 1,
+        [FromQuery] int pageSize = PageRequest.DefaultPageSize,
+        CancellationToken ct = default)
+        => Ok(await imports.ListAsync(
+            new BusinessId(businessId), status, new PageRequest(page, pageSize), ct));
 
     [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPatch("{stagedId:guid}")]
-    public async Task<IActionResult> Categorise(Guid stagedId, CategoriseRequest body, CancellationToken ct)
+    public async Task<IActionResult> Categorise(Guid businessId, Guid stagedId, CategoriseRequest body, CancellationToken ct)
     {
         var result = await imports.CategoriseAsync(
-            new StagedTransactionId(stagedId), new CategoryId(body.CategoryId), ct);
+            new BusinessId(businessId), new StagedTransactionId(stagedId), new CategoryId(body.CategoryId), ct);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 
     [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost("{stagedId:guid}/approve")]
-    public async Task<IActionResult> Approve(Guid stagedId, CancellationToken ct)
+    public async Task<IActionResult> Approve(Guid businessId, Guid stagedId, CancellationToken ct)
     {
-        var result = await imports.ApproveAsync(new StagedTransactionId(stagedId), ct);
+        var result = await imports.ApproveAsync(new BusinessId(businessId), new StagedTransactionId(stagedId), ct);
         return result.IsSuccess
             ? Ok(new { transactionId = result.Value.Value })
             : BadRequest(new { error = result.Error });
@@ -55,9 +62,9 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
 
     [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost("{stagedId:guid}/discard")]
-    public async Task<IActionResult> Discard(Guid stagedId, CancellationToken ct)
+    public async Task<IActionResult> Discard(Guid businessId, Guid stagedId, CancellationToken ct)
     {
-        var result = await imports.DiscardAsync(new StagedTransactionId(stagedId), ct);
+        var result = await imports.DiscardAsync(new BusinessId(businessId), new StagedTransactionId(stagedId), ct);
         return result.IsSuccess ? NoContent() : BadRequest(new { error = result.Error });
     }
 }
