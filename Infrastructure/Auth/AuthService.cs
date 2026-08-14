@@ -11,6 +11,7 @@ public sealed class AuthService : IAuthService
 {
     private readonly UserManager<ApplicationUser> _users;
     private readonly ITokenIssuer _tokens;
+    private readonly IRefreshTokenStore _refreshTokens;
     private readonly IIdentityRepository _identity;
     private readonly IOptions<Hosting> _hosting;
     private readonly IEmailSender _email;
@@ -19,6 +20,7 @@ public sealed class AuthService : IAuthService
     public AuthService(
     UserManager<ApplicationUser> users,
     ITokenIssuer tokens,
+    IRefreshTokenStore refreshTokens,
     IIdentityRepository identity,
     IOptions<Hosting> hosting,
     IEmailSender email,
@@ -26,6 +28,7 @@ public sealed class AuthService : IAuthService
     {
         _users = users;
         _tokens = tokens;
+        _refreshTokens = refreshTokens;
         _identity = identity;
         _hosting = hosting;
         _email = email;
@@ -121,22 +124,54 @@ public sealed class AuthService : IAuthService
 
  
 
-    public async Task<Result<string>> SignInAsync(string email, string password, CancellationToken ct = default)
+    public async Task<Result<AuthTokens>> SignInAsync(string email, string password, CancellationToken ct = default)
     {
         var principal = await _users.FindByEmailAsync(email);
         if (principal is null || !await _users.CheckPasswordAsync(principal, password))
-            return Result<string>.Failure("Invalid credentials.");
+            return Result<AuthTokens>.Failure("Invalid credentials.");
 
         // Deny sign-in until the email is confirmed, and re-send the confirmation link
         // so a user who lost the original can still complete it.
         if (!await _users.IsEmailConfirmedAsync(principal))
         {
             await SendEmailConfirmationAsync(email, ct);
-            return Result<string>.Failure("Please confirm your email before signing in. We've sent you a fresh confirmation link.");
+            return Result<AuthTokens>.Failure("Please confirm your email before signing in. We've sent you a fresh confirmation link.");
         }
 
-        // Stamp each business role the user holds into the token so authorization can
-        // scope decisions per business (the shared Guid links principal to domain user).
+        // A successful password check starts a new session (its own refresh-token family).
+        var access = await IssueAccessTokenAsync(principal, ct);
+        var refresh = await _refreshTokens.IssueAsync(principal.Id, ct);
+        return Result<AuthTokens>.Success(ToTokens(access, refresh.RawToken, refresh.ExpiresAt));
+    }
+
+    public async Task<Result<AuthTokens>> RefreshAsync(string refreshToken, CancellationToken ct = default)
+    {
+        // Rotate first: this validates the presented token, revokes it, and mints its
+        // successor (or trips reuse detection and kills the family).
+        var rotation = await _refreshTokens.RotateAsync(refreshToken, ct);
+        if (rotation.IsFailure)
+            return Result<AuthTokens>.Failure(rotation.Error);
+
+        var principal = await _users.FindByIdAsync(rotation.Value.UserId.ToString());
+        if (principal is null)
+            return Result<AuthTokens>.Failure("Invalid refresh token.");
+
+        // Re-read memberships so role changes take effect on the next refresh rather
+        // than being frozen at sign-in for the whole refresh-token lifetime.
+        var access = await IssueAccessTokenAsync(principal, ct);
+        return Result<AuthTokens>.Success(ToTokens(access, rotation.Value.RawToken, rotation.Value.ExpiresAt));
+    }
+
+    public async Task<Result> LogoutAsync(string refreshToken, CancellationToken ct = default)
+    {
+        await _refreshTokens.RevokeAsync(refreshToken, ct);
+        return Result.Success();
+    }
+
+    // Stamps each business role the user holds into the access token so authorization
+    // can scope decisions per business (the shared Guid links principal to domain user).
+    private async Task<IssuedAccessToken> IssueAccessTokenAsync(ApplicationUser principal, CancellationToken ct)
+    {
         var memberships = await _identity.ListMembershipsForUserAsync(new UserId(principal.Id), ct);
         var roles = memberships
             .Select(m => new BusinessRoleAssignment(m.BusinessId.Value, m.Role.ToString()))
@@ -144,4 +179,7 @@ public sealed class AuthService : IAuthService
 
         return _tokens.Issue(principal.Id, principal.Email!, roles);
     }
+
+    private static AuthTokens ToTokens(IssuedAccessToken access, string refreshToken, DateTime refreshExpiresAt) =>
+        new(access.Token, access.ExpiresAt, refreshToken, refreshExpiresAt);
 }

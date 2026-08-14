@@ -42,6 +42,8 @@ public static class ModuleRegistration
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<ITokenIssuer, JwtTokenIssuer>();
+        // Persists and rotates refresh tokens (auth schema); backs login/refresh/logout.
+        services.AddScoped<IRefreshTokenStore, RefreshTokenStore>();
 
         // Outbound email (SMTP) for confirmation links, bound + validated at startup.
         services.AddOptions<SmtpOptions>()

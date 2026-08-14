@@ -138,8 +138,20 @@ JWT, and sends it as `Authorization: Bearer <token>` on every call.
   the domain user and its credentials commit together, linked by a shared `Guid`
   id (no FK). **Enforcement is on:** a deny-by-default fallback policy in `Program.cs`
   requires an authenticated caller on every endpoint except those marked
-  `[AllowAnonymous]` (login, the registration flows, the Mono webhook), and
-  fine-grained `[Authorize(Policy = ...)]` permission checks layer on top.
+  `[AllowAnonymous]` (login, the registration flows, refresh/logout, the Mono
+  webhook), and fine-grained `[Authorize(Policy = ...)]` permission checks layer on top.
+- **Refresh-token rotation** — sign-in returns a **short-lived access token**
+  (`Jwt:AccessTokenMinutes`, default 15) plus a **refresh token**; `POST /api/auth/refresh`
+  exchanges the refresh token for a new pair and `POST /api/auth/logout` ends the session
+  (both `[AllowAnonymous]`, since the access token is usually expired by then). Refresh
+  tokens live in `auth.refresh_tokens` (`RefreshToken` + `IRefreshTokenStore`/`RefreshTokenStore`
+  in `Infrastructure/Auth`) — only the **SHA-256 hash** is stored, never the raw value.
+  Tokens are **single-use and rotated**: each refresh revokes the presented token and
+  mints a successor in the same `FamilyId` (one login session's lineage). Presenting an
+  already-rotated token is treated as **theft** — the whole family is revoked (reuse
+  detection). Logout revokes the family too. Access-token lifetime and refresh-token
+  lifetime (`Jwt:RefreshTokenDays`, default 14) are config, both with in-code fallbacks.
+  Adds a table, so **drop the dev DB** for `EnsureCreated` to create `auth.refresh_tokens`.
 - **Per-business permission authorization** — the JWT carries one `business_role`
   claim per membership (value `"{businessId}:{role}"`, stamped by `AuthService` at
   login). `PermissionPolicyProvider` turns a permission name used as a policy

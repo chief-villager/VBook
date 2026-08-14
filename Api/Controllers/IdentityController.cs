@@ -11,11 +11,12 @@ namespace Bookkeeping.Api.Controllers;
 public sealed class IdentityController(IIdentityService identity, IAuthService auth) : ControllerBase
 {
     public sealed record RegisterUserRequest(string Email, string DisplayName, string Password);
-    public sealed record RegisterBusinessRequest(Guid OwnerId, string Name, BusinessSector Sector);
     public sealed record RegisterBusinessWithOwnerRequest(
         string Email, string DisplayName, string Password, string BusinessName, BusinessSector Sector);
     public sealed record AddMemberRequest(string Email, string DisplayName, string Password, BusinessRole Role);
     public sealed record LoginRequest(string Email, string Password);
+    public sealed record RefreshRequest(string RefreshToken);
+    public sealed record LogoutRequest(string RefreshToken);
     public sealed record ForgotPasswordRequest(string Email);
     public sealed record ResetPasswordRequest(string NewPassword);
     public sealed record SendEmailConfirmationRequest(string Email);
@@ -51,9 +52,40 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
     {
         var result = await auth.SignInAsync(body.Email, body.Password, ct);
         return result.IsSuccess
-            ? Ok(new { token = result.Value })
+            ? Ok(TokenResponse(result.Value))
             : BadRequest(new { error = result.Error });
     }
+
+    // Anonymous: the caller's access token has usually expired by the time it refreshes,
+    // so the refresh token in the body is the sole credential.
+    [AllowAnonymous]
+    [HttpPost("api/auth/refresh")]
+    public async Task<IActionResult> Refresh(RefreshRequest body, CancellationToken ct)
+    {
+        var result = await auth.RefreshAsync(body.RefreshToken, ct);
+        return result.IsSuccess
+            ? Ok(TokenResponse(result.Value))
+            : BadRequest(new { error = result.Error });
+    }
+
+    // Anonymous and idempotent: revokes the session behind the given refresh token.
+    // Doesn't depend on a live access token, so a client can log out even after its
+    // access token has expired.
+    [AllowAnonymous]
+    [HttpPost("api/auth/logout")]
+    public async Task<IActionResult> Logout(LogoutRequest body, CancellationToken ct)
+    {
+        await auth.LogoutAsync(body.RefreshToken, ct);
+        return NoContent();
+    }
+
+    private static object TokenResponse(AuthTokens tokens) => new
+    {
+        accessToken = tokens.AccessToken,
+        accessTokenExpiresAt = tokens.AccessTokenExpiresAt,
+        refreshToken = tokens.RefreshToken,
+        refreshTokenExpiresAt = tokens.RefreshTokenExpiresAt,
+    };
 
     // Issues a password-reset token (as a callback URL). In production this URL is
     // emailed to the user rather than returned in the response; it is surfaced here
