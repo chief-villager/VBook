@@ -1,13 +1,12 @@
 // Sign-in — the returning-user counterpart to Onboarding. Collects email and
-// password, calls the Identity login endpoint, stores the returned JWT in the
-// in-memory token store, and routes to the dashboard. Visuals reuse the blueprint
-// card + corner-mark language from src/styles/industry.css so it sits alongside
-// the onboarding flow.
+// password and calls `login`, which stores the session (access token in memory,
+// refresh token persisted), then routes to the dashboard. Visuals reuse the
+// blueprint card + corner-mark language from src/styles/industry.css so it sits
+// alongside the onboarding flow.
 
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../lib/api'
-import { setAccessToken } from '../lib/auth'
 import { login } from '../lib/identity'
 
 const cornerMarks = (
@@ -36,8 +35,7 @@ export default function SignIn() {
 
     setSubmitting(true)
     try {
-      const { token } = await login(email.trim(), password)
-      setAccessToken(token)
+      await login(email.trim(), password)
       navigate('/dashboard')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')

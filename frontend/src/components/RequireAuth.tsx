@@ -2,9 +2,10 @@
 // store and, if there's no session, redirects to /signin instead of letting the
 // page render and then fail its API calls with 401s.
 //
-// The check is synchronous today because the token lives only in memory (see
-// lib/auth.ts). When a refresh-token flow is added, this is the place to grow a
-// "checking…" state that awaits a silent token refresh before deciding.
+// The check is synchronous: by the time a route renders, SessionBootstrap has
+// already awaited any silent refresh on load (components/SessionBootstrap.tsx), so
+// the in-memory token reflects a restored session. Tokens that expire mid-session
+// are handled transparently by the api.ts refresh-and-retry, not here.
 
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
