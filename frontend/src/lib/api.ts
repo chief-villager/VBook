@@ -76,5 +76,8 @@ export const post = <T>(path: string, body?: unknown, options?: ApiOptions) =>
 export const put = <T>(path: string, body?: unknown, options?: ApiOptions) =>
   api<T>(path, { ...options, method: 'PUT', body })
 
+export const patch = <T>(path: string, body?: unknown, options?: ApiOptions) =>
+  api<T>(path, { ...options, method: 'PATCH', body })
+
 export const del = <T>(path: string, options?: ApiOptions) =>
   api<T>(path, { ...options, method: 'DELETE' })
