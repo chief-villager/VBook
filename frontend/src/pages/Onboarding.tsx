@@ -5,13 +5,14 @@
 // cards, corner marks, tokens).
 //
 // Inputs are controlled and "Create my account" POSTs them to the Identity
-// combined-signup endpoint (owner + business in one transaction), then signs the
-// new owner straight in so the dashboard has a bearer token.
+// combined-signup endpoint (owner + business in one transaction). It then tries to
+// sign the new owner straight in — but the API sends a confirmation email at
+// registration and denies sign-in until the address is confirmed, so the done step
+// adapts: dashboard if we got a session, "confirm your email then sign in" if not.
 
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../lib/api'
-import { setAccessToken } from '../lib/auth'
 import { BUSINESS_SECTORS, login, registerBusinessWithOwner, type BusinessSector } from '../lib/identity'
 
 type Step = 'setup' | 'done'
@@ -44,6 +45,9 @@ const cornerMarks = (
 export default function Onboarding() {
   const navigate = useNavigate()
   const [step, setStep] = useState<Step>('setup')
+  // Whether the post-registration sign-in succeeded (i.e. the email was already
+  // confirmed). When false, the done step routes to sign-in instead of the dashboard.
+  const [signedIn, setSignedIn] = useState(false)
 
   // Account fields
   const [name, setName] = useState('')
@@ -82,9 +86,15 @@ export default function Onboarding() {
         businessName: bizName.trim(),
         sector,
       })
-      // Sign in immediately so the dashboard has a bearer token to work with.
-      const { token } = await login(email.trim(), password)
-      setAccessToken(token)
+      // Try to sign in immediately so the dashboard has a session. If the API denies
+      // it (unconfirmed email — the default), that's not a failure: the account was
+      // created and the done step will point them to confirm their email and sign in.
+      try {
+        await login(email.trim(), password)
+        setSignedIn(true)
+      } catch {
+        setSignedIn(false)
+      }
       setStep('done')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Something went wrong. Please try again.')
@@ -329,31 +339,42 @@ export default function Onboarding() {
                 </svg>
               </div>
               <h1 style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 38, lineHeight: 1.05, margin: '0 0 12px 0' }}>
-                You&rsquo;re set up
+                {signedIn ? 'You’re set up' : 'Confirm your email'}
               </h1>
               <p style={{ margin: '0 auto 28px auto', fontSize: 16, lineHeight: 1.55, color: 'var(--color-neutral-700)', maxWidth: '42ch' }}>
-                Your books are open. Connect your bank from the dashboard and vbook will start recording what comes in and goes
-                out &mdash; you only confirm what things were for.
+                {signedIn ? (
+                  <>
+                    Your books are open. Connect your bank from the dashboard and vbook will start recording what comes in and
+                    goes out &mdash; you only confirm what things were for.
+                  </>
+                ) : (
+                  <>
+                    Your account is created. We&rsquo;ve emailed a confirmation link to <strong>{email.trim()}</strong> &mdash;
+                    open it to activate your account, then sign in to open your books.
+                  </>
+                )}
               </p>
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 11, textAlign: 'left', marginBottom: 30 }}>
-                {DONE_ITEMS.map((d) => (
-                  <div key={d} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderTop: '1px solid var(--color-divider)', paddingTop: 11 }}>
-                    <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-accent-700)', lineHeight: 1.5 }}>
-                      &#10003;
-                    </span>
-                    <span style={{ fontSize: 14.5, lineHeight: 1.5 }}>{d}</span>
-                  </div>
-                ))}
-              </div>
+              {signedIn && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 11, textAlign: 'left', marginBottom: 30 }}>
+                  {DONE_ITEMS.map((d) => (
+                    <div key={d} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, borderTop: '1px solid var(--color-divider)', paddingTop: 11 }}>
+                      <span style={{ fontFamily: 'var(--font-heading)', fontSize: 13, color: 'var(--color-accent-700)', lineHeight: 1.5 }}>
+                        &#10003;
+                      </span>
+                      <span style={{ fontSize: 14.5, lineHeight: 1.5 }}>{d}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               <button
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate(signedIn ? '/dashboard' : '/signin')}
                 className="btn btn-primary btn-block blueprint"
-                style={{ position: 'relative' }}
+                style={{ position: 'relative', marginTop: signedIn ? 0 : 8 }}
               >
                 {cornerMarks}
-                Go to my dashboard
+                {signedIn ? 'Go to my dashboard' : 'Go to sign in'}
               </button>
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
                 <button onClick={restart} className="btn btn-ghost" style={{ fontSize: 13 }}>

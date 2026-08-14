@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import RequireAuth from './components/RequireAuth.tsx'
+import SessionBootstrap from './components/SessionBootstrap.tsx'
 import Onboarding from './pages/Onboarding.tsx'
 import SignIn from './pages/SignIn.tsx'
 import Dashboard from './pages/Dashboard.tsx'
@@ -11,6 +12,7 @@ import ComingSoon from './pages/ComingSoon.tsx'
 
 export default function App() {
   return (
+    <SessionBootstrap>
     <Routes>
       {/* Public: no session required. */}
       <Route path="/onboarding" element={<Onboarding />} />
@@ -27,5 +29,6 @@ export default function App() {
       <Route path="/credit" element={<RequireAuth><ComingSoon section="credit" /></RequireAuth>} />
       <Route path="*" element={<Navigate to="/onboarding" replace />} />
     </Routes>
+    </SessionBootstrap>
   )
 }

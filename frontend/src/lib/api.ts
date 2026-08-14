@@ -2,7 +2,7 @@
 // through `api()` so the base URL and the `Authorization: Bearer` header are applied
 // in exactly one place.
 
-import { getAccessToken } from './auth'
+import { clearSession, getAccessToken, getRefreshToken, storeSession } from './auth'
 
 const BASE_URL = import.meta.env.VITE_API_URL
 
@@ -27,6 +27,45 @@ interface ApiOptions extends Omit<RequestInit, 'body'> {
   body?: unknown
   /** Set false for endpoints that must be called without a token (login, register). */
   auth?: boolean
+  /** Internal: set once after a 401-triggered refresh so a retry can't loop. */
+  _retry?: boolean
+}
+
+// Exchanges the stored refresh token for a new token pair. Single-flighted: if a
+// refresh is already running (e.g. several calls 401 at once), everyone awaits the
+// same request rather than each rotating the refresh token — which would look like
+// token reuse to the API and revoke the whole session. Returns whether it succeeded.
+let refreshInFlight: Promise<boolean> | null = null
+
+export function attemptRefresh(): Promise<boolean> {
+  if (refreshInFlight) return refreshInFlight
+
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return Promise.resolve(false)
+
+  refreshInFlight = (async () => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/auth/refresh`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ refreshToken }),
+      })
+      if (!response.ok) {
+        // Expired, revoked, or reuse-detected: the session is over.
+        clearSession()
+        return false
+      }
+      const data = (await response.json()) as { accessToken: string; refreshToken: string }
+      storeSession({ accessToken: data.accessToken, refreshToken: data.refreshToken })
+      return true
+    } catch {
+      return false
+    } finally {
+      refreshInFlight = null
+    }
+  })()
+
+  return refreshInFlight
 }
 
 // Controllers report expected failures as `{ error }` and unexpected ones may carry
@@ -41,7 +80,7 @@ function errorMessage(payload: unknown, status: number): string {
 }
 
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { body, auth = true, headers, ...rest } = options
+  const { body, auth = true, headers, _retry, ...rest } = options
 
   const finalHeaders = new Headers(headers)
   if (body !== undefined) finalHeaders.set('Content-Type', 'application/json')
@@ -56,6 +95,11 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
     headers: finalHeaders,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   })
+
+  // Access token expired mid-session: silently refresh once and replay the request.
+  if (response.status === 401 && auth && !_retry && getRefreshToken()) {
+    if (await attemptRefresh()) return api<T>(path, { ...options, _retry: true })
+  }
 
   const isJson = response.headers.get('content-type')?.includes('application/json')
   const payload = isJson ? await response.json().catch(() => undefined) : await response.text()
@@ -75,6 +119,9 @@ export const post = <T>(path: string, body?: unknown, options?: ApiOptions) =>
 
 export const put = <T>(path: string, body?: unknown, options?: ApiOptions) =>
   api<T>(path, { ...options, method: 'PUT', body })
+
+export const patch = <T>(path: string, body?: unknown, options?: ApiOptions) =>
+  api<T>(path, { ...options, method: 'PATCH', body })
 
 export const del = <T>(path: string, options?: ApiOptions) =>
   api<T>(path, { ...options, method: 'DELETE' })

@@ -3,6 +3,7 @@
 // response shapes. Both are anonymous — the caller has no token yet.
 
 import { post } from './api'
+import { clearSession, getRefreshToken, storeSession } from './auth'
 
 // Order matches the API's BusinessSector enum (Domain/Identity/BusinessSector.cs).
 // The API has no JsonStringEnumConverter configured, so it deserializes enums by
@@ -48,10 +49,30 @@ export function registerBusinessWithOwner(input: RegisterBusinessWithOwnerInput)
   )
 }
 
-interface LoginResponse {
-  token: string
+// Mirrors the API's AuthTokens payload (Application/Identity/AuthTokens.cs). The
+// access token authorises calls until it expires; the refresh token is exchanged for
+// a new pair after that (see api.ts `attemptRefresh`).
+export interface AuthTokens {
+  accessToken: string
+  accessTokenExpiresAt: string
+  refreshToken: string
+  refreshTokenExpiresAt: string
 }
 
-export function login(email: string, password: string) {
-  return post<LoginResponse>('/api/auth/login', { email, password }, { auth: false })
+// Signs in and stores the session (access token in memory, refresh token persisted),
+// so callers just await it and navigate.
+export async function login(email: string, password: string): Promise<AuthTokens> {
+  const tokens = await post<AuthTokens>('/api/auth/login', { email, password }, { auth: false })
+  storeSession({ accessToken: tokens.accessToken, refreshToken: tokens.refreshToken })
+  return tokens
+}
+
+// Revokes the session server-side (best-effort) and clears it locally.
+export async function logout(): Promise<void> {
+  const refreshToken = getRefreshToken()
+  try {
+    if (refreshToken) await post('/api/auth/logout', { refreshToken }, { auth: false })
+  } finally {
+    clearSession()
+  }
 }

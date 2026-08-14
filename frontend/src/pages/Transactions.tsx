@@ -1,84 +1,84 @@
-// Transactions — React port of the "transactions" section of "Vbook.dc.html".
-// Two tabs: "Categorise" (the bank-feed review queue — pick a category per row and
-// approve it into the ledger) and "Find a transaction" (a date-filtered list of
-// everything, with running money-in/out/net totals).
+// Transactions — React port of the "transactions" section of "Vbook.dc.html", wired
+// to the live API. Tabs come first, then:
+//   "Categorise" — the bank-feed review queue. When nothing is staged, a "Pull
+//     transactions from bank" card fetches a linked account's feed
+//     (POST .../bank-imports). Once rows are staged, a pulled bar + four summary
+//     cards + the review table appear; each row takes a category
+//     (PATCH .../bank-imports/{id}) and is approved into the ledger
+//     (POST .../bank-imports/{id}/approve).
+//   "Find a transaction" — the recorded-transactions list over a date range
+//     (GET .../transactions?from&to), paged, with running money-in/out/net totals.
 //
 // Visuals come from src/styles/industry.css (blueprint cards, corner marks, tokens).
-// Data is the prototype's own mock set so the page renders standalone; the API
-// wiring is marked with TODOs against the real bank-import + transactions endpoints:
-//   GET   /api/businesses/{businessId}/bank-imports?status=Pending   (list to categorise)
-//   PATCH /api/businesses/{businessId}/bank-imports/{stagedId}       (set category)
-//   POST  /api/businesses/{businessId}/bank-imports/{stagedId}/approve
-//   (find tab) the recorded-transactions list endpoint
 
-import { useMemo, useState, type CSSProperties, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import AppShell from '../components/AppShell.tsx'
-
-// Reference categories — mirrors transactions.categories seed data.
-const CATEGORIES = [
-  'Sales',
-  'Other income',
-  'Purchases',
-  'Rent',
-  'Transport',
-  'Utilities',
-  'Wages',
-  'Owner investment',
-  'Bank loan',
-  'Other Expenses',
-]
-
-interface Tx {
-  id: string
-  date: string
-  who: string
-  note: string
-  amount: number
-  category: string | null
-}
-
-// Mock feed — positive = money in, negative = money out.
-const TX: Tx[] = [
-  { id: 't1', date: '27 Aug', who: 'Zenith Bank ••4471', note: 'Transfer received', amount: 180000, category: null },
-  { id: 't2', date: '26 Aug', who: 'Total Filling Station', note: 'Card payment, Lekki', amount: -42500, category: null },
-  { id: 't3', date: '24 Aug', who: 'Lekki Retail Ltd', note: 'GTBank transfer', amount: 1250000, category: null },
-  { id: 't4', date: '23 Aug', who: 'Sahara Foods Ltd', note: 'Transfer received', amount: 640000, category: 'Sales' },
-  { id: 't5', date: '22 Aug', who: 'Chidi Nwosu', note: 'August salary', amount: -320000, category: 'Wages' },
-  { id: 't6', date: '21 Aug', who: 'Ikeja Auto Spares', note: 'Card payment', amount: -87400, category: null },
-  { id: 't7', date: '20 Aug', who: 'Bright Star Ventures', note: 'Transfer received', amount: 415000, category: 'Sales' },
-  { id: 't8', date: '19 Aug', who: 'GTBank', note: 'Monthly maintenance fee', amount: -1075, category: 'Other Expenses' },
-  { id: 't9', date: '18 Aug', who: 'Ojota Warehouse Ltd', note: 'Standing order', amount: -450000, category: 'Rent' },
-  { id: 't10', date: '17 Aug', who: 'MTN Data', note: 'Card payment', amount: -15000, category: null },
-  { id: 't11', date: '15 Aug', who: 'Kano Traders Co', note: 'Transfer received', amount: 890000, category: 'Sales' },
-  { id: 't12', date: '14 Aug', who: 'Dangote Cement Depot', note: 'Card payment', amount: -268000, category: 'Purchases' },
-  { id: 't13', date: '13 Aug', who: 'Uche Enterprises', note: 'Transfer received', amount: 505000, category: null },
-  { id: 't14', date: '12 Aug', who: 'Palm Grove Salon', note: 'Transfer received', amount: 300000, category: 'Sales' },
-  { id: 't15', date: '12 Aug', who: 'Mobil Filling Station', note: 'Card payment, Ojota', amount: -96000, category: null },
-  { id: 't16', date: '11 Aug', who: 'Dangote Cement Depot', note: 'Transfer sent', amount: -620000, category: null },
-  { id: 't17', date: '10 Aug', who: 'Ngozi Adeyemi', note: 'August salary', amount: -285000, category: 'Wages' },
-  { id: 't18', date: '9 Aug', who: 'Ojota Fuel Depot', note: 'Generator diesel', amount: -140000, category: null },
-  { id: 't19', date: '8 Aug', who: 'AXA Mansard', note: 'Vehicle cover, quarterly', amount: -210000, category: null },
-  { id: 't20', date: '7 Aug', who: 'GTBank', note: 'POS terminal charges', amount: -25025, category: 'Other Expenses' },
-  { id: 't21', date: '6 Aug', who: 'Swift Haulage', note: 'Transfer sent', amount: -175000, category: null },
-  { id: 't22', date: '5 Aug', who: 'Airtel', note: 'Airtime and data', amount: -40000, category: null },
-  { id: 't23', date: '4 Aug', who: 'Sterling Bank', note: 'Monthly loan repayment', amount: -160000, category: 'Bank loan' },
-]
+import { ApiError } from '../lib/api'
+import { getBusinessId } from '../lib/auth'
+import { listBankAccounts, type LinkedBankAccount } from '../lib/bankAccounts'
+import {
+  approveImport,
+  categoriseImport,
+  getCategories,
+  isOutflow,
+  listStagedImports,
+  listTransactions,
+  pullBankImports,
+  TransactionType,
+  type Category,
+  type Paged,
+  type StagedTransaction,
+  type TransactionSummary,
+} from '../lib/transactions'
 
 const NAIRA = '₦'
 const MINUS = '−'
+const FIND_PAGE_SIZE = 50
+// The review queue is usually small; pull a generous first page rather than paging it.
+const QUEUE_PAGE_SIZE = 100
+// How far back the "Pull transactions from bank" action reaches.
+const PULL_WINDOW_DAYS = 90
 
-// "+₦1,200" / "−₦900" — signed, for the amount column.
-const naira = (n: number) => (n > 0 ? '+' : MINUS) + NAIRA + Math.abs(n).toLocaleString('en-NG')
-// "₦1,200" / "−₦900" — for totals (no leading + on positives).
-const amt = (n: number) => (n < 0 ? MINUS : '') + NAIRA + Math.abs(n).toLocaleString('en-NG')
+// "+₦1,200" / "−₦900" — signed, for the amount column. `out` decides direction since
+// amounts are stored as positive magnitudes.
+const naira = (magnitude: number, out: boolean) =>
+  (out ? MINUS : '+') + NAIRA + Math.abs(magnitude).toLocaleString('en-NG')
+// "₦1,200" — for the totals cards (magnitude only; the label carries direction).
+const money = (n: number) => NAIRA + Math.abs(n).toLocaleString('en-NG')
+// "₦1,200" / "−₦900" — for the net figure, which can be negative.
+const signed = (n: number) => (n < 0 ? MINUS : '') + NAIRA + Math.abs(n).toLocaleString('en-NG')
 
-// "27 Aug" (year assumed 2026, matching the prototype) -> Date, for range filtering.
-const MONTHS: Record<string, number> = {
-  Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11,
+// Local-date yyyy-MM-dd (the API binds these to DateOnly). Local, not UTC, so "today"
+// matches the user's calendar day.
+function toDateParam(d: Date): string {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
-const dayOf = (label: string) => {
-  const [d, mon] = label.split(' ')
-  return new Date(2026, MONTHS[mon] ?? 0, Number(d))
+
+// "2026-08-27" -> "27 Aug". Parse the parts by hand so the calendar day never shifts
+// across a timezone boundary (new Date("yyyy-MM-dd") is parsed as UTC).
+function formatDay(iso: string): string {
+  const [y, m, d] = iso.split('-').map(Number)
+  if (!y || !m || !d) return iso
+  return new Date(y, m - 1, d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short' })
+}
+
+const TYPE_LABELS: Record<number, string> = {
+  [TransactionType.Income]: 'Income',
+  [TransactionType.Expense]: 'Expense',
+  [TransactionType.Capital]: 'Capital',
+  [TransactionType.Loan]: 'Loan',
+}
+
+// The current-month range used as the Find tab's default and its Clear target.
+function defaultRange() {
+  const now = new Date()
+  return {
+    from: toDateParam(new Date(now.getFullYear(), now.getMonth(), 1)),
+    to: toDateParam(now),
+  }
 }
 
 const cornerMarks = (
@@ -96,41 +96,163 @@ export default function Transactions() {
   const [showTerms, setShowTerms] = useState(false)
   const [tab, setTab] = useState<Tab>('categorise')
 
-  // Per-row category overrides, keyed by transaction id. A row leaves the
-  // "categorise" list once it has a category.
-  const [cats, setCats] = useState<Record<string, string | null>>({})
-  const [fFrom, setFFrom] = useState('')
-  const [fTo, setFTo] = useState('')
+  const businessId = useMemo(() => getBusinessId(), [])
 
-  const withCats = useMemo(
-    () => TX.map((t) => ({ ...t, category: t.id in cats ? cats[t.id] : t.category })),
-    [cats],
-  )
+  // Shared reference categories for the categorise dropdown.
+  const [categories, setCategories] = useState<Category[]>([])
 
-  const reviewCount = withCats.filter((t) => !t.category).length
-  const moneyIn = withCats.filter((t) => t.amount > 0).reduce((a, t) => a + t.amount, 0)
-  const moneyOut = withCats.filter((t) => t.amount < 0).reduce((a, t) => a + t.amount, 0)
+  // Categorise tab — the pending review queue and the bank behind it.
+  const [queue, setQueue] = useState<StagedTransaction[] | null>(null)
+  const [queueError, setQueueError] = useState<string | null>(null)
+  const [selected, setSelected] = useState<Record<string, string>>({})
+  const [rowBusy, setRowBusy] = useState<string | null>(null)
+  const [actionError, setActionError] = useState<string | null>(null)
 
-  const uncategorised = withCats.filter((t) => !t.category)
+  const [banks, setBanks] = useState<LinkedBankAccount[]>([])
+  const [pulling, setPulling] = useState(false)
+  const [pullError, setPullError] = useState<string | null>(null)
 
-  const filteredSource = withCats.filter((t) => {
-    const d = dayOf(t.date)
-    if (fFrom && d < new Date(fFrom)) return false
-    if (fTo && d > new Date(fTo)) return false
-    return true
-  })
-  const filteredIn = filteredSource.filter((t) => t.amount > 0).reduce((a, t) => a + t.amount, 0)
-  const filteredOut = filteredSource.filter((t) => t.amount < 0).reduce((a, t) => a + t.amount, 0)
+  // Find tab — recorded transactions over a date range.
+  const initialRange = useMemo(defaultRange, [])
+  const [fFrom, setFFrom] = useState(initialRange.from)
+  const [fTo, setFTo] = useState(initialRange.to)
+  const [page, setPage] = useState(1)
+  const [txns, setTxns] = useState<Paged<TransactionSummary> | null>(null)
+  const [txLoading, setTxLoading] = useState(true)
+  const [txError, setTxError] = useState<string | null>(null)
 
-  const setCat = (id: string, value: string) =>
-    // TODO: PATCH .../bank-imports/{id} with the chosen CategoryId.
-    setCats((prev) => ({ ...prev, [id]: value || null }))
+  // Categories once, up front (the dropdown needs their ids).
+  useEffect(() => {
+    if (!businessId) return
+    let cancelled = false
+    getCategories(businessId)
+      .then((data) => !cancelled && setCategories(data))
+      .catch(() => !cancelled && setCategories([]))
+    return () => {
+      cancelled = true
+    }
+  }, [businessId])
 
-  const approve = (id: string) =>
-    // TODO: POST .../bank-imports/{id}/approve — on success the row leaves the queue.
-    // For now, treat approval as "categorised" so it drops off the review list only
-    // if it already has a category (the button mirrors the design's red CTA).
-    setCats((prev) => ({ ...prev, [id]: prev[id] ?? TX.find((t) => t.id === id)?.category ?? null }))
+  // Linked bank accounts drive the pull action.
+  useEffect(() => {
+    if (!businessId) return
+    let cancelled = false
+    listBankAccounts(businessId)
+      .then((data) => !cancelled && setBanks(data))
+      .catch(() => !cancelled && setBanks([]))
+    return () => {
+      cancelled = true
+    }
+  }, [businessId])
+
+  // The pending review queue.
+  function loadQueue(signal?: { cancelled: boolean }) {
+    if (!businessId) return
+    listStagedImports(businessId, 1, QUEUE_PAGE_SIZE)
+      .then((data) => {
+        if (signal?.cancelled) return
+        setQueue(data.items)
+        setSelected((prev) => {
+          const next = { ...prev }
+          for (const row of data.items) if (row.categoryId) next[row.id.value] ??= row.categoryId.value
+          return next
+        })
+        setQueueError(null)
+      })
+      .catch((err) => {
+        if (!signal?.cancelled)
+          setQueueError(err instanceof ApiError ? err.message : 'Could not load the review queue.')
+      })
+  }
+
+  useEffect(() => {
+    const signal = { cancelled: false }
+    loadQueue(signal)
+    return () => {
+      signal.cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [businessId])
+
+  // Recorded transactions for the selected range/page.
+  useEffect(() => {
+    if (!businessId) {
+      setTxError('We could not find a business on your account.')
+      setTxLoading(false)
+      return
+    }
+    let cancelled = false
+    setTxLoading(true)
+    listTransactions(businessId, fFrom, fTo, page, FIND_PAGE_SIZE)
+      .then((data) => {
+        if (!cancelled) {
+          setTxns(data)
+          setTxError(null)
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) setTxError(err instanceof ApiError ? err.message : 'Could not load your transactions.')
+      })
+      .finally(() => {
+        if (!cancelled) setTxLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [businessId, fFrom, fTo, page])
+
+  // Pull a linked account's feed into the review queue, then reload it.
+  function pull() {
+    if (!businessId || pulling) return
+    setPullError(null)
+    const account = banks.find((b) => b.status === 0) ?? banks[0]
+    if (!account) {
+      setPullError('Connect a bank account on the dashboard before pulling transactions.')
+      return
+    }
+    const now = new Date()
+    const from = toDateParam(new Date(now.getTime() - PULL_WINDOW_DAYS * 86_400_000))
+    setPulling(true)
+    pullBankImports(businessId, account.externalAccountId, from, toDateParam(now))
+      .then(() => loadQueue())
+      .catch((err) => setPullError(err instanceof ApiError ? err.message : 'Could not pull from your bank.'))
+      .finally(() => setPulling(false))
+  }
+
+  // Assign a category to a staged row (stays Pending until approved).
+  function chooseCategory(stagedId: string, categoryId: string) {
+    setSelected((prev) => ({ ...prev, [stagedId]: categoryId }))
+    setActionError(null)
+    if (!categoryId || !businessId) return
+    categoriseImport(businessId, stagedId, categoryId).catch((err) =>
+      setActionError(err instanceof ApiError ? err.message : 'Could not save that category.'),
+    )
+  }
+
+  // Promote a categorised row into the ledger; on success it leaves the queue.
+  function approve(stagedId: string) {
+    if (!businessId || !selected[stagedId] || rowBusy) return
+    setRowBusy(stagedId)
+    setActionError(null)
+    approveImport(businessId, stagedId)
+      .then(() => setQueue((prev) => (prev ?? []).filter((r) => r.id.value !== stagedId)))
+      .catch((err) => setActionError(err instanceof ApiError ? err.message : 'Could not approve that transaction.'))
+      .finally(() => setRowBusy(null))
+  }
+
+  const bankLabel = (banks.find((b) => b.status === 0) ?? banks[0])?.institutionName ?? 'your bank'
+  const reviewCount = queue?.length ?? 0
+  const hasQueue = (queue?.length ?? 0) > 0
+
+  // Summary cards reflect the pulled feed (the pending queue).
+  const queueIn = (queue ?? []).filter((r) => !isOutflow(r.suggestedType)).reduce((a, r) => a + r.amount, 0)
+  const queueOut = (queue ?? []).filter((r) => isOutflow(r.suggestedType)).reduce((a, r) => a + r.amount, 0)
+
+  // Find tab totals reflect the loaded page for the current range.
+  const items = txns?.items ?? []
+  const findIn = items.filter((t) => !isOutflow(t.type)).reduce((a, t) => a + t.amount, 0)
+  const findOut = items.filter((t) => isOutflow(t.type)).reduce((a, t) => a + t.amount, 0)
+  const totalPages = txns ? Math.max(1, Math.ceil(txns.totalCount / txns.pageSize)) : 1
 
   return (
     <AppShell
@@ -141,18 +263,6 @@ export default function Transactions() {
       onToggleTerms={() => setShowTerms((s) => !s)}
     >
       <div style={{ padding: '26px 40px 48px 40px', display: 'flex', flexDirection: 'column', gap: 22 }}>
-        {/* Summary cards */}
-        <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 18 }}>
-          <SummaryCard label="Money in" value={NAIRA + moneyIn.toLocaleString('en-NG')} accent />
-          <SummaryCard label="Money out" value={NAIRA + Math.abs(moneyOut).toLocaleString('en-NG')} />
-          <SummaryCard
-            label={<>Left over{showTerms && <span style={termHint}>&nbsp;(net)</span>}</>}
-            value={NAIRA + (moneyIn + moneyOut).toLocaleString('en-NG')}
-            accent
-          />
-          <SummaryCard label="Needs review" value={String(reviewCount)} />
-        </section>
-
         {/* Tabs */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           <TabButton label="Categorise" active={tab === 'categorise'} onClick={() => setTab('categorise')} />
@@ -160,55 +270,126 @@ export default function Transactions() {
         </div>
 
         {tab === 'categorise' && (
-          <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline', justifyContent: 'space-between' }}>
-              <h2 style={sectionHeading}>Categorise these</h2>
-              <span style={{ fontSize: 13, color: 'var(--color-neutral-600)' }}>
-                {reviewCount} waiting &middot; about 6 minutes of work
-              </span>
-            </div>
-            <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.5, color: 'var(--color-neutral-700)', maxWidth: '66ch' }}>
-              Your bank feed brought these in automatically. Tell vbook what each one was for and it disappears from this list.
-            </p>
+          <>
+            {pullError && <ErrorLine message={pullError} />}
+            {queueError && <ErrorLine message={queueError} />}
 
-            {uncategorised.length > 0 ? (
-              <div className="card blueprint" style={{ position: 'relative', padding: 0 }}>
-                {cornerMarks}
-                <div style={{ overflowX: 'auto' }}>
-                  <TableHead columns={['Date', 'Description', 'Category', 'Amount', 'Approve']} />
-                  {uncategorised.map((t) => (
-                    <div key={t.id} style={{ ...rowStyle, background: 'var(--color-neutral-100)' }}>
-                      <span style={dateCell}>{t.date}</span>
-                      <DescriptionCell who={t.who} note={t.note} needsReview />
-                      <select
-                        className="input"
-                        value={(t.id in cats ? cats[t.id] : t.category) ?? ''}
-                        onChange={(e) => setCat(t.id, e.target.value)}
-                        style={{ flex: '0 0 180px', minWidth: 0, fontSize: 13.5 }}
-                      >
-                        <option value="">Choose a category</option>
-                        {CATEGORIES.map((c) => (
-                          <option key={c} value={c}>
-                            {c}
-                          </option>
-                        ))}
-                      </select>
-                      <span style={{ ...amountCell, color: t.amount > 0 ? 'var(--color-accent-800)' : 'var(--color-text)' }}>
-                        {naira(t.amount)}
-                      </span>
-                      <span style={{ flex: '0 0 110px', minWidth: 0, textAlign: 'right' }}>
-                        <button onClick={() => approve(t.id)} style={approveBtn}>
-                          Approve
-                        </button>
-                      </span>
-                    </div>
-                  ))}
+            {queue === null ? (
+              <EmptyCard message="Loading the review queue…" />
+            ) : hasQueue ? (
+              <>
+                {/* Pulled bar */}
+                <div
+                  style={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 12,
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    border: '1px solid var(--color-divider)',
+                    padding: '12px 18px',
+                  }}
+                >
+                  <span style={{ fontSize: 13.5, color: 'var(--color-neutral-700)' }}>
+                    Transactions pulled from {bankLabel} &middot; up to date as of today
+                  </span>
+                  <button onClick={pull} disabled={pulling} className="btn btn-ghost" style={{ fontSize: 13.5 }}>
+                    {pulling ? 'Pulling…' : 'Pull again'}
+                  </button>
                 </div>
-              </div>
+
+                {/* Summary cards */}
+                <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 18 }}>
+                  <SummaryCard label="Money in" value={money(queueIn)} accent />
+                  <SummaryCard label="Money out" value={money(queueOut)} />
+                  <SummaryCard
+                    label={<>Left over{showTerms && <span style={termHint}>&nbsp;(net)</span>}</>}
+                    value={signed(queueIn - queueOut)}
+                    accent
+                  />
+                  <SummaryCard label="Needs review" value={String(reviewCount)} />
+                </section>
+
+                {/* Categorise table */}
+                <section style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline', justifyContent: 'space-between' }}>
+                    <h2 style={sectionHeading}>Categorise these</h2>
+                    <span style={{ fontSize: 13, color: 'var(--color-neutral-600)' }}>{reviewCount} waiting</span>
+                  </div>
+                  <p style={{ margin: 0, fontSize: 14.5, lineHeight: 1.5, color: 'var(--color-neutral-700)', maxWidth: '66ch' }}>
+                    Your bank feed brought these in automatically. Tell vbook what each one was for, then approve it into
+                    your books.
+                  </p>
+
+                  {actionError && <ErrorLine message={actionError} />}
+
+                  <div className="card blueprint" style={{ position: 'relative', padding: 0 }}>
+                    {cornerMarks}
+                    <div style={{ overflowX: 'auto' }}>
+                      <TableHead columns={['Date', 'Description', 'Category', 'Amount', 'Approve']} />
+                      {queue.map((t) => {
+                        const chosen = selected[t.id.value] ?? ''
+                        const out = isOutflow(t.suggestedType)
+                        return (
+                          <div key={t.id.value} style={{ ...rowStyle, background: chosen ? 'transparent' : 'var(--color-neutral-100)' }}>
+                            <span style={dateCell}>{formatDay(t.occurredOn)}</span>
+                            <DescriptionCell who={t.narration} note={t.providerCategory ?? 'Bank feed'} needsReview={!chosen} />
+                            <select
+                              className="input"
+                              value={chosen}
+                              onChange={(e) => chooseCategory(t.id.value, e.target.value)}
+                              style={{ flex: '0 0 180px', minWidth: 0, fontSize: 13.5 }}
+                            >
+                              <option value="">Choose a category</option>
+                              {categories.map((c) => (
+                                <option key={c.id.value} value={c.id.value}>
+                                  {c.name}
+                                </option>
+                              ))}
+                            </select>
+                            <span style={{ ...amountCell, color: out ? 'var(--color-text)' : 'var(--color-accent-800)' }}>
+                              {naira(t.amount, out)}
+                            </span>
+                            <span style={{ flex: '0 0 110px', minWidth: 0, textAlign: 'right' }}>
+                              <button
+                                onClick={() => approve(t.id.value)}
+                                disabled={!chosen || rowBusy === t.id.value}
+                                style={{ ...approveBtn, opacity: !chosen || rowBusy === t.id.value ? 0.5 : 1 }}
+                              >
+                                {rowBusy === t.id.value ? 'Approving…' : 'Approve'}
+                              </button>
+                            </span>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </section>
+              </>
             ) : (
-              <EmptyCard message="Nothing left to categorise. Every transaction is explained." />
+              /* Nothing staged — pull from the bank. */
+              <section className="card blueprint" style={{ position: 'relative', padding: '40px 34px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center' }}>
+                {cornerMarks}
+                <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 21h18" />
+                  <path d="M5 21V10l7-5 7 5v11" />
+                  <path d="M9 21v-6h6v6" />
+                </svg>
+                <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 26, margin: 0 }}>Nothing to categorise</h2>
+                <p style={{ margin: 0, maxWidth: '52ch', fontSize: 14.5, lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
+                  Bring in everything that went through your bank account. vbook reads the entries and lists the ones that
+                  still need a category.
+                </p>
+                <button onClick={pull} disabled={pulling} className="btn btn-primary blueprint" style={{ position: 'relative', marginTop: 6, padding: '14px 26px', fontSize: 16, opacity: pulling ? 0.6 : 1 }}>
+                  {cornerMarks}
+                  {pulling ? 'Pulling transactions…' : 'Pull transactions from bank'}
+                </button>
+                <span style={{ fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
+                  {banks.length > 0 ? `${bankLabel} · ${banks.length} account${banks.length === 1 ? '' : 's'} connected` : 'No bank connected yet'}
+                </span>
+              </section>
             )}
-          </section>
+          </>
         )}
 
         {tab === 'find' && (
@@ -216,23 +397,43 @@ export default function Transactions() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'baseline', justifyContent: 'space-between' }}>
               <h2 style={sectionHeading}>Find a transaction</h2>
               <span style={{ fontSize: 13, color: 'var(--color-neutral-600)' }}>
-                {filteredSource.length === 1 ? '1 transaction' : `${filteredSource.length} transactions`} found
+                {txns ? (txns.totalCount === 1 ? '1 transaction' : `${txns.totalCount} transactions`) : '—'} found
               </span>
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-end' }}>
               <div className="field" style={{ flex: '0 1 200px' }}>
                 <label htmlFor="tx-from">From</label>
-                <input className="input" id="tx-from" type="date" value={fFrom} onChange={(e) => setFFrom(e.target.value)} />
+                <input
+                  className="input"
+                  id="tx-from"
+                  type="date"
+                  value={fFrom}
+                  onChange={(e) => {
+                    setPage(1)
+                    setFFrom(e.target.value)
+                  }}
+                />
               </div>
               <div className="field" style={{ flex: '0 1 200px' }}>
                 <label htmlFor="tx-to">To</label>
-                <input className="input" id="tx-to" type="date" value={fTo} onChange={(e) => setFTo(e.target.value)} />
+                <input
+                  className="input"
+                  id="tx-to"
+                  type="date"
+                  value={fTo}
+                  onChange={(e) => {
+                    setPage(1)
+                    setFTo(e.target.value)
+                  }}
+                />
               </div>
               <button
                 onClick={() => {
-                  setFFrom('')
-                  setFTo('')
+                  const r = defaultRange()
+                  setPage(1)
+                  setFFrom(r.from)
+                  setFTo(r.to)
                 }}
                 className="btn btn-ghost"
                 style={{ fontSize: 13, marginBottom: 2 }}
@@ -242,40 +443,60 @@ export default function Transactions() {
             </div>
 
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 26, padding: '14px 20px', border: '1px solid var(--color-divider)' }}>
-              <MiniTotal label="Money in" value={amt(filteredIn)} accent />
-              <MiniTotal label="Money out" value={amt(Math.abs(filteredOut))} />
-              <MiniTotal label="Left over" value={amt(filteredIn + filteredOut)} accent />
+              <MiniTotal label="Money in" value={money(findIn)} accent />
+              <MiniTotal label="Money out" value={money(findOut)} />
+              <MiniTotal label="Left over" value={signed(findIn - findOut)} accent />
             </div>
 
-            {filteredSource.length > 0 ? (
-              <div className="card blueprint" style={{ position: 'relative', padding: 0 }}>
-                {cornerMarks}
-                <div style={{ overflowX: 'auto' }}>
-                  <TableHead columns={['Date', 'Description', 'Category', 'Amount']} />
-                  {filteredSource.map((t) => (
-                    <div key={t.id} style={{ ...rowStyle, background: !t.category ? 'var(--color-neutral-100)' : 'transparent' }}>
-                      <span style={dateCell}>{t.date}</span>
-                      <DescriptionCell who={t.who} note={t.note} needsReview={!t.category} />
-                      <span
-                        style={{
-                          flex: '0 0 180px',
-                          minWidth: 0,
-                          fontSize: 14,
-                          color: 'var(--color-neutral-700)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {t.category ?? ''}
-                      </span>
-                      <span style={{ ...amountCell, color: t.amount > 0 ? 'var(--color-accent-800)' : 'var(--color-text)' }}>
-                        {naira(t.amount)}
-                      </span>
-                    </div>
-                  ))}
+            {txError && <ErrorLine message={txError} />}
+
+            {txLoading && !txns ? (
+              <EmptyCard message="Loading your transactions…" />
+            ) : items.length > 0 ? (
+              <>
+                <div className="card blueprint" style={{ position: 'relative', padding: 0, opacity: txLoading ? 0.6 : 1 }}>
+                  {cornerMarks}
+                  <div style={{ overflowX: 'auto' }}>
+                    <TableHead columns={['Date', 'Category', 'Type', 'Amount']} />
+                    {items.map((t) => {
+                      const out = isOutflow(t.type)
+                      return (
+                        <div key={t.id.value} style={{ ...rowStyle, opacity: t.isVoided ? 0.5 : 1 }}>
+                          <span style={dateCell}>{formatDay(t.occurredOn)}</span>
+                          <span style={{ flex: '1 1 160px', minWidth: 0, fontSize: 14.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {t.category}
+                            {t.isVoided && (
+                              <span className="tag tag-outline" style={{ fontSize: 11, marginLeft: 8 }}>
+                                Voided
+                              </span>
+                            )}
+                          </span>
+                          <span style={{ flex: '0 0 180px', minWidth: 0, fontSize: 14, color: 'var(--color-neutral-700)' }}>
+                            {TYPE_LABELS[t.type] ?? '—'}
+                          </span>
+                          <span style={{ ...amountCell, color: out ? 'var(--color-text)' : 'var(--color-accent-800)' }}>
+                            {naira(t.amount, out)}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
                 </div>
-              </div>
+
+                {totalPages > 1 && (
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                    <button className="btn btn-ghost" style={{ fontSize: 13 }} disabled={page <= 1 || txLoading} onClick={() => setPage((p) => Math.max(1, p - 1))}>
+                      ← Previous
+                    </button>
+                    <span style={{ fontSize: 13, color: 'var(--color-neutral-600)' }}>
+                      Page {page} of {totalPages}
+                    </span>
+                    <button className="btn btn-ghost" style={{ fontSize: 13 }} disabled={page >= totalPages || txLoading} onClick={() => setPage((p) => p + 1)}>
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <EmptyCard message="Nothing matches those filters. Try widening them." />
             )}
@@ -390,6 +611,14 @@ function EmptyCard({ message }: { message: string }) {
       {cornerMarks}
       <p style={{ margin: 0, fontSize: 15, color: 'var(--color-neutral-700)' }}>{message}</p>
     </div>
+  )
+}
+
+function ErrorLine({ message }: { message: string }) {
+  return (
+    <p style={{ margin: 0, fontSize: 13.5, color: '#b3261e' }} role="alert">
+      {message}
+    </p>
   )
 }
 

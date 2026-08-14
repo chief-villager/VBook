@@ -1,20 +1,60 @@
-// In-memory access-token store. Kept in a module variable (not localStorage) so a
-// stolen XSS payload can't read it off disk and it clears on tab close. On reload
-// the token is gone by design — call a refresh flow to obtain a new one when the
-// API supports it. See CLAUDE.md "Authentication".
+// Session store. The short-lived access token is kept in a module variable (not
+// localStorage) so a stolen XSS payload can't read it off disk and it clears on tab
+// close. The long-lived refresh token is persisted so a reload can silently mint a
+// new access token (see api.ts `attemptRefresh` and components/SessionBootstrap).
+//
+// Persisting the refresh token in localStorage is the pragmatic choice while the API
+// returns it in the response body; the stronger option is an HttpOnly cookie, which
+// needs the API to set the cookie and CORS to move off AllowAnyOrigin. See CLAUDE.md
+// "Authentication" and the CORS known gap.
+
+const REFRESH_KEY = 'vbook.refreshToken'
 
 let accessToken: string | null = null
 
-export function setAccessToken(token: string | null): void {
-  accessToken = token
+export interface Session {
+  accessToken: string
+  refreshToken: string
+}
+
+// Stores a freshly issued pair: access token in memory, refresh token persisted.
+export function storeSession({ accessToken: access, refreshToken }: Session): void {
+  accessToken = access
+  try {
+    localStorage.setItem(REFRESH_KEY, refreshToken)
+  } catch {
+    // Private-mode / disabled storage: the session just won't survive a reload.
+  }
+}
+
+// Clears both tokens — on sign-out or when a refresh is rejected.
+export function clearSession(): void {
+  accessToken = null
+  try {
+    localStorage.removeItem(REFRESH_KEY)
+  } catch {
+    // ignore
+  }
 }
 
 export function getAccessToken(): string | null {
   return accessToken
 }
 
-export function clearAccessToken(): void {
-  accessToken = null
+export function setAccessToken(token: string | null): void {
+  accessToken = token
+}
+
+export function getRefreshToken(): string | null {
+  try {
+    return localStorage.getItem(REFRESH_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function hasRefreshToken(): boolean {
+  return getRefreshToken() !== null
 }
 
 export function isAuthenticated(): boolean {
