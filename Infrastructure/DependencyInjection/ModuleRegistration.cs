@@ -115,6 +115,9 @@ public static class ModuleRegistration
     public static IServiceCollection AddReportingModule(this IServiceCollection services)
     {
         services.AddScoped<IFinancialReportingService, FinancialReportingService>();
+        // Stateless and thread-safe: one instance renders every report (shares the
+        // QuestPDF Community license set in Program.cs).
+        services.AddSingleton<IFinancialReportPdfGenerator, FinancialReportPdfGenerator>();
         return services;
     }
 

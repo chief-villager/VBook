@@ -2,6 +2,15 @@ using Bookkeeping.Domain.Common;
 
 namespace Bookkeeping.Application.Reporting;
 
+// The financial statements a caller can compute and download. Bound from the
+// `type` query parameter on the reports download endpoint (case-insensitive by name).
+public enum ReportType
+{
+    ProfitAndLoss,
+    BalanceSheet,
+    CashFlow
+}
+
 public sealed record StatementLineItem(string StatementLine, string AccountName, decimal Amount);
 
 public sealed record ProfitAndLoss(
