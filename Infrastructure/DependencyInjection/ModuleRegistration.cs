@@ -34,7 +34,8 @@ public static class ModuleRegistration
         // ASP.NET Core Identity backed by the shared AppDbContext (auth schema).
         services.AddIdentityCore<ApplicationUser>(options => options.Password.RequiredLength = 8)
             .AddRoles<IdentityRole<Guid>>()
-            .AddEntityFrameworkStores<AppDbContext>();
+            .AddEntityFrameworkStores<AppDbContext>()
+            .AddDefaultTokenProviders();
 
         // Override the default store so credential creation joins the caller's unit of
         // work instead of saving itself (see BookkeepingUserStore).

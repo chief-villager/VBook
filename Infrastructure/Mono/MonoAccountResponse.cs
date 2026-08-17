@@ -67,7 +67,7 @@ public sealed class MonoUnlinkResponse
 
 public sealed class MonoTransaction
 {
-    [JsonPropertyName("_id")]
+    [JsonPropertyName("id")]
     public string? Id { get; set; }
 
     [JsonPropertyName("amount")]

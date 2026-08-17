@@ -43,10 +43,22 @@ public sealed class StagedBankTransaction : AggregateRoot<StagedTransactionId>, 
             ImportedAt = DateTimeOffset.UtcNow,
         };
 
-    public Result Categorise(CategoryId categoryId)
+    public Result Categorise(CategoryId categoryId, TransactionType categoryType)
     {
         if (Status != StagedTransactionStatus.Pending)
             return Result.Failure("Only pending imports can be categorised.");
+
+        // The bank's debit/credit is ground truth for cash direction: a credit brings
+        // money in, a debit takes it out. Guard on that *direction*, not the exact type
+        // — a credit is legitimately income, owner capital or a loan drawdown (all
+        // inflows), so only reject a category whose cash effect contradicts the feed.
+        // The recorded Transaction takes its type from the category, so without this a
+        // miscategorisation would silently flip the sign of cash flow.
+        var moneyCameIn = SuggestedType.IsCashInflow();
+        if (categoryType.IsCashInflow() != moneyCameIn)
+            return Result.Failure(moneyCameIn
+                ? "This import is a credit (money in); choose an income, capital or loan category."
+                : "This import is a debit (money out); choose an expense category.");
 
         CategoryId = categoryId;
         return Result.Success();

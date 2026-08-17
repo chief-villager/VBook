@@ -40,7 +40,7 @@ internal sealed class MonoBankFeedProvider(MonoApiClient client) : IBankFeedProv
             foreach (var tx in page.Data)
                 results.Add(Map(tx));
 
-            cursor = page.Meta.Next;
+            cursor = page.Meta.NextPage;
         }
         while (cursor is not null);
 

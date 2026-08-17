@@ -76,7 +76,7 @@ public sealed class BankImportService : IBankImportService
         if (category is null)
             return Result.Failure("Category not found.");
 
-        var result = staged.Categorise(categoryId);
+        var result = staged.Categorise(categoryId, category.Type);
         if (result.IsFailure)
             return result;
 

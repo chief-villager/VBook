@@ -7,6 +7,6 @@ namespace Bookkeeping.Domain.Common
 {
     public class Hosting
     {
-        public string Urls { get; set; } = default!;
+        public string BaseUrl { get; set; } = default!;
     }
 }
