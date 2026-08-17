@@ -87,12 +87,30 @@ namespace Bookkeeping.Infrastructure.Mono
         public HttpStatusCode StatusCode { get; } = status;
     }
 
-    internal sealed record ExchangeTokenResponse(string Id);
+    // Mono wraps the account id under a "data" envelope: { "data": { "id": "..." } }.
+    // Expose Id off the top so callers stay ignorant of the envelope.
+    internal sealed record ExchangeTokenResponse(ExchangeTokenData Data)
+    {
+        public string Id => Data.Id;
+    }
+
+    internal sealed record ExchangeTokenData(string Id);
 
     internal sealed record TransactionsResponse(
         IReadOnlyList<MonoTransaction> Data,
         MonoMeta Meta);
 
   
-    internal sealed record MonoMeta(int Total, int Page, string? Next);
+    // Mono sends page/total as null when there's nothing to paginate, so these must be
+    // nullable ints. Note "next" is a *full URL* (…/transactions?page=2), not a bare
+    // cursor — NextPage extracts the page number so the caller can pass it back as the
+    // `page` query param.
+    internal sealed record MonoMeta(int? Total, int? Page, string? Next)
+    {
+        public string? NextPage =>
+            !string.IsNullOrEmpty(Next)
+            && QueryHelpers.ParseQuery(new Uri(Next).Query).TryGetValue("page", out var page)
+                ? page.ToString()
+                : null;
+    }
 }

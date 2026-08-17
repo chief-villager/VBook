@@ -1,4 +1,5 @@
 using Bookkeeping.Application.Abstractions;
+using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Identity;
 using Bookkeeping.Domain.Common;
 using Microsoft.AspNetCore.Identity;
@@ -16,6 +17,7 @@ public sealed class AuthService : IAuthService
     private readonly IOptions<Hosting> _hosting;
     private readonly IEmailSender _email;
     private readonly ILogger<AuthService> _logger;
+    private readonly IUnitOfWork _unitOfWork;
 
     public AuthService(
     UserManager<ApplicationUser> users,
@@ -24,7 +26,8 @@ public sealed class AuthService : IAuthService
     IIdentityRepository identity,
     IOptions<Hosting> hosting,
     IEmailSender email,
-    ILogger<AuthService> logger)
+    ILogger<AuthService> logger,
+    IUnitOfWork unitOfWork)
     {
         _users = users;
         _tokens = tokens;
@@ -33,6 +36,7 @@ public sealed class AuthService : IAuthService
         _hosting = hosting;
         _email = email;
         _logger = logger;
+        _unitOfWork = unitOfWork;
     }
 
     public async Task<Result<bool>> ResetPasswordAsync(string email, string token, string newPassword, CancellationToken ct = default)
@@ -42,6 +46,7 @@ public sealed class AuthService : IAuthService
             return Result<bool>.Failure("Invalid credentials.");
 
         var result = await _users.ResetPasswordAsync(principal, token, newPassword);
+        await _unitOfWork.SaveChangesAsync(ct); // Ensure the password reset is persisted
         return result.Succeeded
             ? Result<bool>.Success(true)
             : Result<bool>.Failure(string.Join("; ", result.Errors.Select(e => e.Description)));
@@ -70,7 +75,7 @@ public sealed class AuthService : IAuthService
             return Result<string>.Failure("Invalid credentials.");
 
         var token = await _users.GenerateEmailConfirmationTokenAsync(principal);
-        var callbackurl = $"{_hosting.Value.Urls}/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        var callbackurl = $"{_hosting.Value.BaseUrl}/api/auth/confirm-email?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
         return Result<string>.Success(callbackurl);
     }
 
@@ -106,7 +111,8 @@ public sealed class AuthService : IAuthService
         if (principal is null)
             return Result<bool>.Failure("Invalid credentials.");
 
-        var result = await _users.ConfirmEmailAsync(principal, token);
+        var result = await _users.ConfirmEmailAsync(principal, token); 
+        await _unitOfWork.SaveChangesAsync(ct); // Ensure the confirmation is persisted       
         return result.Succeeded
             ? Result<bool>.Success(true)
             : Result<bool>.Failure(string.Join("; ", result.Errors.Select(e => e.Description)));
@@ -118,7 +124,7 @@ public sealed class AuthService : IAuthService
             return Result<string>.Failure("Invalid credentials.");
 
         var token = await _users.GeneratePasswordResetTokenAsync(principal);
-        var callbackurl = $"{_hosting.Value.Urls}/reset-password?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
+        var callbackurl = $"{_hosting.Value.BaseUrl}/api/auth/reset-password?email={Uri.EscapeDataString(email)}&token={Uri.EscapeDataString(token)}";
         return Result<string>.Success(callbackurl);
     }
 
