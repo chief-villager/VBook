@@ -34,6 +34,9 @@ public sealed class InvoiceRepository : GenericRepository<Invoice>, IInvoiceRepo
         return new PagedResult<Invoice>(items, page.Page, page.PageSize, total);
     }
 
+    public Task<int> CountForBusinessAsync(BusinessId businessId, CancellationToken ct = default)
+        => Set.CountAsync(i => i.BusinessId == businessId, ct);
+
     public Task<bool> NumberExistsAsync(BusinessId businessId, string invoiceNumber, CancellationToken ct = default)
         => Set.AnyAsync(i => i.BusinessId == businessId && i.InvoiceNumber == invoiceNumber, ct);
 }

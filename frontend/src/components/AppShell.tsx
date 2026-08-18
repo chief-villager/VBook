@@ -8,6 +8,7 @@
 
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { logout } from '../lib/identity'
 
 export type Section = 'dashboard' | 'transactions' | 'invoices' | 'ledger' | 'reports' | 'credit'
 
@@ -83,6 +84,19 @@ export default function AppShell({
     : ''
   // The Reports submenu starts open when the user is inside Reports.
   const [reportsOpen, setReportsOpen] = useState(active === 'reports')
+  const [signingOut, setSigningOut] = useState(false)
+
+  // Revokes the session (best-effort) and returns to the sign-in screen. logout()
+  // clears the local session even if the server call fails, so navigation is safe.
+  async function signOut() {
+    if (signingOut) return
+    setSigningOut(true)
+    try {
+      await logout()
+    } finally {
+      navigate('/signin', { replace: true })
+    }
+  }
 
   return (
     <div
@@ -228,6 +242,32 @@ export default function AppShell({
             {/* TODO: signed-in user name from the session once auth is wired. */}
             <span style={{ fontSize: 11.5, color: 'var(--color-accent-400)' }}>Adaeze Okafor</span>
           </div>
+          <button
+            onClick={signOut}
+            disabled={signingOut}
+            title="Sign out"
+            aria-label="Sign out"
+            style={{
+              marginLeft: 'auto',
+              flex: '0 0 auto',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: 7,
+              background: 'none',
+              border: '1px solid var(--color-accent-800)',
+              borderRadius: 'var(--radius-sm)',
+              color: 'var(--color-accent-300)',
+              cursor: signingOut ? 'default' : 'pointer',
+              opacity: signingOut ? 0.6 : 1,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+          </button>
         </div>
       </aside>
 

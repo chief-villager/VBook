@@ -15,24 +15,40 @@ public sealed class InvoiceService : IInvoiceService
         _unitOfWork = unitOfWork;
     }
 
+    // Server-assigned invoice numbers: "INV-00001", sequential per business.
+    private const string NumberPrefix = "INV-";
+    private static string FormatNumber(int sequence) => $"{NumberPrefix}{sequence:D5}";
+
     public async Task<Result<InvoiceId>> CreateAsync(CreateInvoiceCommand command, CancellationToken ct = default)
     {
-        if (await _repository.NumberExistsAsync(command.BusinessId, command.InvoiceNumber.Trim(), ct))
-            return Result<InvoiceId>.Failure($"Invoice number '{command.InvoiceNumber}' already exists for this business.");
+        var invoiceNumber = await NextNumberAsync(command.BusinessId, ct);
 
         var lineItems = command.LineItems
             .Select(i => new InvoiceLineItem(i.Description, i.Quantity, i.UnitPrice));
-
+        DateOnly issueDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var result = Invoice.Create(
-            command.BusinessId, command.InvoiceNumber, command.IssueDate,
-            command.DueDate, command.BillTo, command.VatRate, lineItems);
+            command.BusinessId, invoiceNumber, issueDate,
+            command.DueDate, command.BillTo, command.Note, command.VatRate, lineItems);
         if (result.IsFailure)
             return Result<InvoiceId>.Failure(result.Error);
 
         await _repository.AddAsync(result.Value, ct);
-        
+
         await _unitOfWork.SaveChangesAsync(ct);
         return result.Value.Id;
+    }
+
+    // Derives the next number from the current per-business count. Invoices are never
+    // deleted, so count + 1 is the next sequence; the loop is a defensive guard against
+    // a rare concurrent create landing on the same number (the unique index is the
+    // ultimate backstop).
+    private async Task<string> NextNumberAsync(BusinessId businessId, CancellationToken ct)
+    {
+        var sequence = await _repository.CountForBusinessAsync(businessId, ct) + 1;
+        var number = FormatNumber(sequence);
+        while (await _repository.NumberExistsAsync(businessId, number, ct))
+            number = FormatNumber(++sequence);
+        return number;
     }
 
     public async Task<Result> MarkAsPaidAsync(BusinessId businessId, InvoiceId id, CancellationToken ct = default)

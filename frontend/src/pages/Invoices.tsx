@@ -100,8 +100,7 @@ export default function Invoices() {
   const today = useMemo(() => toDateParam(new Date()), [])
   const defaultDue = useMemo(() => toDateParam(new Date(Date.now() + 14 * 86_400_000)), [])
 
-  // New-invoice form.
-  const [invoiceNumber, setInvoiceNumber] = useState('')
+  // New-invoice form. The invoice number is assigned by the server on create.
   const [customer, setCustomer] = useState('')
   const [email, setEmail] = useState('')
   const [due, setDue] = useState(defaultDue)
@@ -159,22 +158,19 @@ export default function Invoices() {
       .map((it) => ({ description: it.desc.trim(), quantity: num(it.qty), unitPrice: num(it.price) }))
       .filter((li) => li.description && li.quantity > 0)
 
-    if (!invoiceNumber.trim()) return setFormError('Give the invoice a number.')
     if (!customer.trim()) return setFormError('Add who the invoice is for.')
     if (lineItems.length === 0) return setFormError('Add at least one line with a description and quantity.')
 
     setSubmitting(true)
     try {
       await createInvoice(businessId, {
-        invoiceNumber: invoiceNumber.trim(),
         issueDate: today,
         dueDate: due,
         billTo: customer.trim(),
         vatRate: vat ? VAT_RATE : 0,
         lineItems,
       })
-      setFormSuccess(`Invoice ${invoiceNumber.trim()} created.`)
-      setInvoiceNumber('')
+      setFormSuccess('Invoice created. Its number was assigned automatically — see “All invoices”.')
       setCustomer('')
       setEmail('')
       setNote('')
@@ -323,12 +319,8 @@ export default function Invoices() {
                 </div>
               </div>
 
-              {/* Number, due, note */}
+              {/* Due, note — the invoice number is assigned by the server on create. */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
-                <div className="field" style={{ flex: '1 1 160px' }}>
-                  <label htmlFor="in-no">Invoice number</label>
-                  <input className="input" id="in-no" type="text" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} placeholder="INV-0001" />
-                </div>
                 <div className="field" style={{ flex: '1 1 160px' }}>
                   <label htmlFor="in-due">Payment due by</label>
                   <input className="input" id="in-due" type="date" value={due} onChange={(e) => setDue(e.target.value)} />

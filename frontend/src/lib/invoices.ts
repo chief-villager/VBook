@@ -39,8 +39,9 @@ export interface Paged<T> {
   totalCount: number
 }
 
+// The invoice number is assigned by the API (sequential per business), so it is not
+// part of the create payload.
 export interface CreateInvoiceInput {
-  invoiceNumber: string
   issueDate: string
   dueDate: string
   billTo: string

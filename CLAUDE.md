@@ -216,6 +216,23 @@ identical for every business. Per-business customization is **out of scope**.
   single hosted instance, but two processors would both pick the same row and render
   the PDF twice. True concurrency would need a claiming transition (a `Processing`
   status) or a DB-level claim (e.g. SQL Server `UPDATE ... WITH (UPDLOCK, READPAST)`).
+- **Invoice numbers are generated per-business but not concurrency-safe.** Invoice
+  numbers are assigned server-side (`InvoiceService` formats `INV-00001`), so the
+  client never supplies one. The sequence is derived from the current per-business
+  invoice count (`InvoiceRepository.CountForBusinessAsync`) + 1, with a
+  `NumberExistsAsync` loop as a defensive guard and the unique index on
+  `(BusinessId, InvoiceNumber)` as the ultimate backstop. This is correct for the
+  current single hosted instance (invoices are never deleted, so count + 1 is always
+  the next number), but two concurrent creates — or a second API instance — could both
+  read the same count and race for the same number, and the loser fails on the unique
+  index rather than retrying. True concurrency would replace the count with a
+  **persisted per-business counter** (`invoices.invoice_counters`, one row per
+  business) incremented under a row lock, e.g. SQL Server
+  `UPDATE ... WITH (UPDLOCK, ROWLOCK) ... OUTPUT INSERTED.LastNumber`, or a DB sequence.
+  Note this is `UPDLOCK, ROWLOCK` (block and wait on the *one* counter row), **not**
+  the `UPDLOCK, READPAST` of the outbox above — READPAST skips locked rows, which is
+  right for a queue of interchangeable jobs but wrong for a single row every create
+  must serialise on.
 
 ## Conventions
 

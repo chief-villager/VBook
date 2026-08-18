@@ -11,14 +11,10 @@ public interface IInvoiceRepository : IGenericRepository<Invoice>
     // One page of the business's invoices, newest first, with the total count.
     Task<PagedResult<Invoice>> ListAsync(BusinessId businessId, PageRequest page, CancellationToken ct = default);
 
-    // Invoice numbers are unique per business; the service checks this before creating.
-    
-    /// <summary>
-    ///  This is used to check if an invoice for a business already exsit
-    /// </summary>
-    /// <param name="businessId"></param>
-    /// <param name="invoiceNumber"></param>
-    /// <param name="ct"></param>
-    /// <returns></returns>
+    // Invoice numbers are assigned server-side and unique per business. The service
+    // derives the next sequence from the current count and guards the rare collision
+    // with NumberExistsAsync (backed by a unique index on BusinessId + InvoiceNumber).
+    Task<int> CountForBusinessAsync(BusinessId businessId, CancellationToken ct = default);
+
     Task<bool> NumberExistsAsync(BusinessId businessId, string invoiceNumber, CancellationToken ct = default);
 }
