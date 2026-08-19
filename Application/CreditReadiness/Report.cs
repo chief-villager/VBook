@@ -31,3 +31,10 @@ public sealed record CreditReadinessReport(
     IReadOnlyList<ReadinessGap> Gaps);
 
 public sealed record DataSufficiency(bool IsSufficient, IReadOnlyList<string> Missing);
+
+public sealed record CreditReadinessDashBoard(
+    BusinessId Business,
+    DateRange Window,
+    int NumberOfTransactions,
+    int MonthsOfHistory,
+    int NumberOfInvoices);

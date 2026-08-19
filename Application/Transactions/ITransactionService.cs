@@ -16,4 +16,5 @@ public interface ITransactionService
         BusinessId businessId, DateRange period, PageRequest page, CancellationToken ct = default);
 
     Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(BusinessId businessId, CancellationToken ct = default);
+    Task<Result<DateOnly>> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default);
 }

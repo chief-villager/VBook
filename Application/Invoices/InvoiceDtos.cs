@@ -5,10 +5,10 @@ namespace Bookkeeping.Application.Invoices;
 
 public sealed record CreateInvoiceCommand(
     BusinessId BusinessId,
-    string InvoiceNumber,
-    DateOnly IssueDate,
     DateOnly DueDate,
     string BillTo,
+    string? CustomerEmail,
+    string? Note,
     decimal VatRate,
     IReadOnlyList<InvoiceLineItemDto> LineItems);
 
@@ -30,6 +30,7 @@ public sealed record InvoiceDetail(
     BusinessId BusinessId,
     string InvoiceNumber,
     string BillTo,
+    string? CustomerEmail,
     DateOnly IssueDate,
     DateOnly DueDate,
     InvoiceStatus Status,

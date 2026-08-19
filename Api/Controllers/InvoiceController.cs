@@ -16,12 +16,14 @@ public sealed class InvoiceController(
     IInvoicePdfGenerator pdfGenerator,
     IHttpClientFactory httpClientFactory) : ControllerBase
 {
+    // Invoice numbers are assigned by the server (sequential per business), so the
+    // client never supplies one.
     public sealed record CreateInvoiceRequest(
-        string InvoiceNumber,
-        DateOnly IssueDate,
         DateOnly DueDate,
         string BillTo,
+        string? CustomerEmail,
         decimal VatRate,
+        string? Note,
         IReadOnlyList<InvoiceLineItemDto> LineItems);
 
     [Authorize(Policy = Permissions.Invoices.Create)]
@@ -29,8 +31,8 @@ public sealed class InvoiceController(
     public async Task<IActionResult> Create(Guid businessId, CreateInvoiceRequest body, CancellationToken ct)
     {
         var command = new CreateInvoiceCommand(
-            new BusinessId(businessId), body.InvoiceNumber, body.IssueDate,
-            body.DueDate, body.BillTo, body.VatRate, body.LineItems);
+            new BusinessId(businessId),
+            body.DueDate, body.BillTo, body.CustomerEmail, body.Note, body.VatRate, body.LineItems);
         var result = await invoices.CreateAsync(command, ct);
         return result.IsSuccess
             ? Ok(new { invoiceId = result.Value.Value })

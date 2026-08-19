@@ -14,7 +14,9 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
 
         builder.Property(i => i.InvoiceNumber).HasMaxLength(64).IsRequired();
         builder.Property(i => i.BillTo).HasMaxLength(256).IsRequired();
+        builder.Property(i => i.CustomerEmail).HasMaxLength(256);
         builder.Property(i => i.Status).HasConversion<string>().HasMaxLength(20);
+        builder.Property(i => i.Note).HasMaxLength(2000);
 
         // Populated out of band once the PDF is rendered and stored; null until then.
         builder.Property(i => i.PdfUrl).HasMaxLength(1024);

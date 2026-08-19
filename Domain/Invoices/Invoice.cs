@@ -12,7 +12,9 @@ public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
     public DateOnly IssueDate { get; private set; }
     public DateOnly DueDate { get; private set; }
     public string BillTo { get; private set; } = string.Empty;
+    public string? CustomerEmail { get; private set; }
     public InvoiceStatus Status { get; private set; }
+    public string? Note { get; private set; }
     public decimal VatRate { get; private set; } = 0.075m;
 
     // Set once the PDF has been rendered and stored; null until then.
@@ -28,7 +30,7 @@ public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
     private Invoice() { }
 
     private Invoice(BusinessId businessId, string invoiceNumber, DateOnly issueDate,
-        DateOnly dueDate, string billTo, decimal vatRate, IEnumerable<InvoiceLineItem> lineItems)
+        DateOnly dueDate, string billTo, string? customerEmail, string? note, decimal vatRate, IEnumerable<InvoiceLineItem> lineItems)
     {
         Id = InvoiceId.New();
         BusinessId = businessId;
@@ -36,6 +38,8 @@ public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
         IssueDate = issueDate;
         DueDate = dueDate;
         BillTo = billTo;
+        CustomerEmail = customerEmail;
+        Note = note;
         VatRate = vatRate;
         Status = InvoiceStatus.Pending;
         _lineItems.AddRange(lineItems);
@@ -49,7 +53,7 @@ public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
     public void AttachPdf(string url) => PdfUrl = url;
 
     public static Result<Invoice> Create(BusinessId businessId, string invoiceNumber, DateOnly issueDate,
-        DateOnly dueDate, string billTo, decimal vatRate, IEnumerable<InvoiceLineItem> lineItems)
+        DateOnly dueDate, string billTo, string? customerEmail, string? note, decimal vatRate, IEnumerable<InvoiceLineItem> lineItems)
     {
         if (string.IsNullOrWhiteSpace(invoiceNumber))
             return Result<Invoice>.Failure("Invoice number is required.");
@@ -66,7 +70,10 @@ public sealed class Invoice : AggregateRoot<InvoiceId>, IBusinessScoped
         if (items.Any(i => i.Quantity <= 0 || i.UnitPrice < 0))
             return Result<Invoice>.Failure("Line items need a positive quantity and a non-negative price.");
 
-        return new Invoice(businessId, invoiceNumber.Trim(), issueDate, dueDate, billTo.Trim(), vatRate, items);
+        // Customer email is optional; normalise a blank to null so it doesn't persist as "".
+        var email = string.IsNullOrWhiteSpace(customerEmail) ? null : customerEmail.Trim();
+
+        return new Invoice(businessId, invoiceNumber.Trim(), issueDate, dueDate, billTo.Trim(), email, note, vatRate, items);
     }
 
     public Result MarkAsPaid()
