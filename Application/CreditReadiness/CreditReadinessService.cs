@@ -144,7 +144,10 @@ public sealed class CreditReadinessService : ICreditReadinessService
         var transactions = await _transactions.ListAsync(businessId, window, ct);
         var NumberOfTransactions = transactions.Count;
         var earliestTransactionDate = await _transactions.GetEarliestTransactionDateAsync(businessId, ct);
-        var months = MonthsBetween(earliestTransactionDate.Value, window.End);
+        // No transactions yet -> no history to measure, so report zero months rather than throw.
+        var months = earliestTransactionDate.IsSuccess
+            ? MonthsBetween(earliestTransactionDate.Value.OccurredOn, window.End)
+            : 0;
         var invoices = await _invoices.ListAsync(businessId, ct);
         var invoicesCount = invoices.Count;
 
@@ -159,6 +162,120 @@ public sealed class CreditReadinessService : ICreditReadinessService
         return Result<CreditReadinessDashBoard>.Success(dashboard);
     }
 
+    public async Task<Result<List<FiveCsRating>>> EvaluateCreditReadinessAsync(BusinessId businessId, DateRange window, CancellationToken ct = default)
+    {   
+       var report = await GenerateReportAsync(businessId, window, ct);
+        if (report.IsFailure)
+            return Result<List<FiveCsRating>>.Failure(report.Error);
+
+      if (report.Value.Records.MonthsWithActivity == 0)
+      {
+            var character = new CreditFactorRating(CreditFactor.Character, Rating.Weak, "Insufficient history to assess creditworthiness.", "Keep recording consistently to build a track record.", 0);
+            var capacity = await CapacityRatingAsync(report.Value.ProfitAndLoss, report.Value.CashFlow, ct);
+            var capital = await CapitalRatingAsync(report.Value.BalanceSheet, ct);
+            var collateral = await CollateralRatingAsync(report.Value.BalanceSheet, ct);
+            var completeness = CompletenessCalculation(capacity.Score, character.Score, capital.Score, collateral.Score);
+            var result = new FiveCsRating(new List<CreditFactorRating> { character, capacity, capital, collateral },  completeness.recordKeepingScore.ToString(), completeness.observableStrengthScore.ToString());
+            return Result<List<FiveCsRating>>.Success(new List<FiveCsRating> { result });
+            // return Result<List<FiveCsRating>>.Failure("No transactions found for the business in the specified window.");
+      }
+
+      if (report.Value.Records.MonthsWithActivity >0 && report.Value.Records.MonthsWithActivity <= MinMonthsOfHistory)
+        {
+            var character = new CreditFactorRating(CreditFactor.Character, Rating.Weak, "Insufficient history to assess creditworthiness.", "Keep recording consistently to build a track record.", 25);
+            var capacity = await CapacityRatingAsync(report.Value.ProfitAndLoss, report.Value.CashFlow, ct);
+            var capital = await CapitalRatingAsync(report.Value.BalanceSheet, ct);
+            var collateral = await CollateralRatingAsync(report.Value.BalanceSheet, ct);
+            var completeness = CompletenessCalculation(capacity.Score, character.Score, capital.Score, collateral.Score);
+            var result = new FiveCsRating(new List<CreditFactorRating> { character, capacity, capital, collateral },  completeness.recordKeepingScore.ToString(), completeness.observableStrengthScore.ToString());
+            return Result<List<FiveCsRating>>.Success(new List<FiveCsRating> { result });
+        }
+
+        if (report.Value.Records.MonthsWithActivity > MinMonthsOfHistory && report.Value.Records.MonthsWithActivity <= 6)
+        {
+            var character = new CreditFactorRating(CreditFactor.Character, Rating.ModerateSignal, "Limited history available for assessment.", "Continue recording to improve credit evaluation.", 50);
+            var capacity = await CapacityRatingAsync(report.Value.ProfitAndLoss, report.Value.CashFlow, ct);
+            var capital = await CapitalRatingAsync(report.Value.BalanceSheet, ct);
+            var collateral = await CollateralRatingAsync(report.Value.BalanceSheet, ct);
+            var completeness = CompletenessCalculation(capacity.Score, character.Score, capital.Score, collateral.Score);
+            var result = new FiveCsRating(new List<CreditFactorRating> { character, capacity, capital, collateral },  completeness.recordKeepingScore.ToString(), completeness.observableStrengthScore.ToString());
+            return Result<List<FiveCsRating>>.Success(new List<FiveCsRating> { result });
+        }
+
+        if (report.Value.Records.MonthsWithActivity > 6 && report.Value.Records.MonthsWithActivity <= 9)
+        {
+            var character = new CreditFactorRating(CreditFactor.Character, Rating.StrongSignal, "Moderate history available for assessment.", "Maintain consistent recording to further improve credit evaluation.", 75);
+            var capacity = await CapacityRatingAsync(report.Value.ProfitAndLoss, report.Value.CashFlow, ct);
+            var capital = await CapitalRatingAsync(report.Value.BalanceSheet, ct);
+            var collateral = await CollateralRatingAsync(report.Value.BalanceSheet, ct);
+            var completeness = CompletenessCalculation(capacity.Score, character.Score, capital.Score, collateral.Score);
+            var result = new FiveCsRating(new List<CreditFactorRating> { character, capacity, capital, collateral },  completeness.recordKeepingScore.ToString(), completeness.observableStrengthScore.ToString());
+            return Result<List<FiveCsRating>>.Success(new List<FiveCsRating> { result });
+        }
+        if (report.Value.Records.MonthsWithActivity > 9)
+        {
+            var character = new CreditFactorRating(CreditFactor.Character, Rating.VeryStrongSignal, "Extensive history available for assessment.", "Continue maintaining consistent recording to maximize credit evaluation.", 100);
+            var capacity = await CapacityRatingAsync(report.Value.ProfitAndLoss, report.Value.CashFlow, ct);
+            var capital = await CapitalRatingAsync(report.Value.BalanceSheet, ct);
+            var collateral = await CollateralRatingAsync(report.Value.BalanceSheet, ct);
+            var completeness = CompletenessCalculation(capacity.Score, character.Score, capital.Score, collateral.Score);
+            var result = new FiveCsRating(new List<CreditFactorRating> { character, capacity, capital, collateral },  completeness.recordKeepingScore.ToString(), completeness.observableStrengthScore.ToString());
+            return Result<List<FiveCsRating>>.Success(new List<FiveCsRating> { result });
+        }
+        
+        return Result<List<FiveCsRating>>.Failure("Unable to evaluate credit readiness.");
+    
+          
+    }
+
+    private Task<CreditFactorRating> CapacityRatingAsync( ProfitAndLoss pnl, CashFlowStatement cashFlow, CancellationToken ct = default)
+    {
+        if (pnl.NetProfit > 0 && cashFlow.NetChange > 0)
+        {
+            return Task.FromResult(new CreditFactorRating(CreditFactor.Capacity, Rating.StrongSignal, "The business has a positive net profit and cash flow, indicating strong capacity to meet financial obligations.", "Maintain profitability and positive cash flow to sustain creditworthiness.", 75));
+        }
+        else if (pnl.NetProfit > 0 && cashFlow.NetChange <= 0)
+        {
+            return Task.FromResult(new CreditFactorRating(CreditFactor.Capacity, Rating.ModerateSignal, "The business has a positive net profit but negative cash flow, indicating moderate capacity to meet financial obligations.", "Improve cash flow management to enhance creditworthiness.", 50));
+        }
+      
+        return Task.FromResult(new CreditFactorRating(CreditFactor.Capacity, Rating.Weak, "The business has negative net profit and/or negative cash flow, indicating weak capacity to meet financial obligations.", "Take steps to improve profitability and cash flow to enhance creditworthiness.", 0));
+    }
+
+    private Task<CreditFactorRating> CapitalRatingAsync(BalanceSheet balanceSheet, CancellationToken ct = default)
+    {
+        if (balanceSheet.TotalEquity > 0 && balanceSheet.TotalAssets > 0 )
+        {
+            return Task.FromResult(new CreditFactorRating(CreditFactor.Capital, Rating.StrongSignal, "The business has sufficient equity and assets, indicating strong capital structure.", "Maintain a healthy capital structure to support creditworthiness.", 75));
+        }
+        else if (balanceSheet.TotalEquity > 0 && balanceSheet.TotalAssets == 0)
+        {
+            return Task.FromResult(new CreditFactorRating(CreditFactor.Capital, Rating.ModerateSignal, "The business has sufficient equity but no assets, indicating moderate capital structure.", "Improve asset base to enhance creditworthiness.", 50));
+        }
+      
+        return Task.FromResult(new CreditFactorRating(CreditFactor.Capital, Rating.Weak, "The business has insufficient equity and/or assets, indicating weak capital structure.", "Take steps to improve equity and asset base to enhance creditworthiness.", 0));
+    }
+
+    private Task<CreditFactorRating> CollateralRatingAsync(BalanceSheet balanceSheet, CancellationToken ct = default)
+    {
+        if (balanceSheet.TotalAssets > 0 )
+        {
+            return Task.FromResult(new CreditFactorRating(CreditFactor.Collateral, Rating.NotObservable, "Lenders assess collateral based on asset value and quality.", "Maintain accurate asset records to support collateral evaluation.", 0));
+        }
+      
+        return Task.FromResult(new CreditFactorRating(CreditFactor.Collateral, Rating.NotObservable, "Lenders assess collateral based on asset value and quality.", "Maintain accurate asset records to support collateral evaluation.", 0));
+    }
+
+    private (int recordKeepingScore, int observableStrengthScore) CompletenessCalculation(int capacity, int character, int capital, int collateralandconditions)
+    {
+        int totalFactors = 4;
+        int observableStrengthScore = (capacity + character + capital + collateralandconditions) / totalFactors;
+        int recordKeepingScore = character;
+        return (recordKeepingScore, observableStrengthScore);
+    }
+    
+   
+    
     private static int MonthsBetween(DateOnly start, DateOnly end) =>
         ((end.Year - start.Year) * 12) + end.Month - start.Month + 1;
 }

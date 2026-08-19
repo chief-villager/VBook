@@ -47,12 +47,12 @@ public sealed class TransactionRepository : GenericRepository<Transaction>, ITra
             .OrderBy(c => c.Name)
             .ToListAsync(ct);
 
-    public async Task<DateOnly?> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default)
+    public async Task<Transaction?> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default)
     {
         var earliestTransaction = await Set
             .Where(t => t.BusinessId == businessId)
             .OrderBy(t => t.OccurredOn)
-            .Select(t => t.OccurredOn)
+            .Select(t => t)
             .FirstOrDefaultAsync(ct);
         return earliestTransaction;
     }

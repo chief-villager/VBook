@@ -35,4 +35,14 @@ public sealed class CreditReadinessController(ICreditReadinessService credit) : 
             ? Ok(result.Value)
             : BadRequest(new { error = result.Error });
     }
+
+    [Authorize(Policy = Permissions.CreditReadiness.Read)]
+    [HttpGet("evaluation")]
+    public async Task<IActionResult> Evaluation(Guid businessId, [FromQuery] DateOnly from, [FromQuery] DateOnly to, CancellationToken ct)
+    {
+        var result = await credit.EvaluateCreditReadinessAsync(new BusinessId(businessId), new DateRange(from, to), ct);
+        return result.IsSuccess
+            ? Ok(result.Value)
+            : BadRequest(new { error = result.Error });
+    }
 }
