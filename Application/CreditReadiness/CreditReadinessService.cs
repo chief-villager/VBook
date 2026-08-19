@@ -1,4 +1,5 @@
 using Bookkeeping.Application.Identity;
+using Bookkeeping.Application.Invoices;
 using Bookkeeping.Application.Reporting;
 using Bookkeeping.Application.Transactions;
 using Bookkeeping.Domain.Common;
@@ -14,15 +15,18 @@ public sealed class CreditReadinessService : ICreditReadinessService
     private readonly IFinancialReportingService _reporting;
     private readonly ITransactionService _transactions;
     private readonly IIdentityService _identity;
+    private readonly IInvoiceService _invoices;
 
     public CreditReadinessService(
         IFinancialReportingService reporting,
         ITransactionService transactions,
-        IIdentityService identity)
+        IIdentityService identity,
+        IInvoiceService invoices)
     {
         _reporting = reporting;
         _transactions = transactions;
         _identity = identity;
+        _invoices = invoices;
     }
 
     public async Task<DataSufficiency> CheckDataSufficiencyAsync(BusinessId businessId, DateRange window, CancellationToken ct = default)
@@ -133,6 +137,26 @@ public sealed class CreditReadinessService : ICreditReadinessService
                 "A lender will want to see how repayments would be serviced."));
 
         return gaps;
+    }
+
+    public async Task<Result<CreditReadinessDashBoard>> CreditReadinessDashBoard(BusinessId businessId, DateRange window, CancellationToken ct = default)
+    {
+        var transactions = await _transactions.ListAsync(businessId, window, ct);
+        var NumberOfTransactions = transactions.Count;
+        var earliestTransactionDate = await _transactions.GetEarliestTransactionDateAsync(businessId, ct);
+        var months = MonthsBetween(earliestTransactionDate.Value, window.End);
+        var invoices = await _invoices.ListAsync(businessId, ct);
+        var invoicesCount = invoices.Count;
+
+        var dashboard = new CreditReadinessDashBoard(
+            Business: businessId,
+            Window: window,
+            NumberOfTransactions: NumberOfTransactions,
+            MonthsOfHistory: months,
+            NumberOfInvoices: invoicesCount
+        );
+
+        return Result<CreditReadinessDashBoard>.Success(dashboard);
     }
 
     private static int MonthsBetween(DateOnly start, DateOnly end) =>

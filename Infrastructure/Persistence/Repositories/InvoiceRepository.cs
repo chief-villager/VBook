@@ -39,4 +39,9 @@ public sealed class InvoiceRepository : GenericRepository<Invoice>, IInvoiceRepo
 
     public Task<bool> NumberExistsAsync(BusinessId businessId, string invoiceNumber, CancellationToken ct = default)
         => Set.AnyAsync(i => i.BusinessId == businessId && i.InvoiceNumber == invoiceNumber, ct);
+
+    public async Task<IReadOnlyCollection<Invoice>> ListAsync(BusinessId businessId, CancellationToken ct = default)
+    {
+        return await Set.Where(i => i.BusinessId == businessId).ToListAsync(ct);
+    }
 }

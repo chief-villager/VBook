@@ -28,7 +28,7 @@ public sealed class InvoiceService : IInvoiceService
         DateOnly issueDate = DateOnly.FromDateTime(DateTime.UtcNow);
         var result = Invoice.Create(
             command.BusinessId, invoiceNumber, issueDate,
-            command.DueDate, command.BillTo, command.Note, command.VatRate, lineItems);
+            command.DueDate, command.BillTo, command.CustomerEmail, command.Note, command.VatRate, lineItems);
         if (result.IsFailure)
             return Result<InvoiceId>.Failure(result.Error);
 
@@ -84,8 +84,13 @@ public sealed class InvoiceService : IInvoiceService
         return new PagedResult<InvoiceSummary>(items, invoices.Page, invoices.PageSize, invoices.TotalCount);
     }
 
+    public async Task<IReadOnlyCollection<Invoice>> ListAsync(BusinessId businessId, CancellationToken ct = default)
+    {
+        return await _repository.ListAsync(businessId, ct);
+    }
+
     private static InvoiceDetail ToDetail(Invoice invoice) => new(
-        invoice.Id, invoice.BusinessId, invoice.InvoiceNumber, invoice.BillTo,
+        invoice.Id, invoice.BusinessId, invoice.InvoiceNumber, invoice.BillTo, invoice.CustomerEmail,
         invoice.IssueDate, invoice.DueDate, invoice.Status, invoice.VatRate,
         invoice.Subtotal, invoice.VatAmount, invoice.TotalAmount,
         invoice.LineItems.Select(li => new InvoiceLineItemDto(li.Description, li.Quantity, li.UnitPrice)).ToList());

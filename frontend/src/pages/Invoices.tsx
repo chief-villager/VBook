@@ -97,7 +97,6 @@ export default function Invoices() {
   const [view, setView] = useState<View>('create')
 
   const businessId = useMemo(() => getBusinessId(), [])
-  const today = useMemo(() => toDateParam(new Date()), [])
   const defaultDue = useMemo(() => toDateParam(new Date(Date.now() + 14 * 86_400_000)), [])
 
   // New-invoice form. The invoice number is assigned by the server on create.
@@ -164,9 +163,10 @@ export default function Invoices() {
     setSubmitting(true)
     try {
       await createInvoice(businessId, {
-        issueDate: today,
         dueDate: due,
         billTo: customer.trim(),
+        customerEmail: email.trim() || undefined,
+        note: note.trim() || undefined,
         vatRate: vat ? VAT_RATE : 0,
         lineItems,
       })
@@ -251,7 +251,7 @@ export default function Invoices() {
                 <div style={fieldGroupLabel}>Who is it for?</div>
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
                   <div className="field" style={{ flex: '1 1 220px' }}>
-                    <label htmlFor="in-cust">Customer name</label>
+                    <label htmlFor="in-cust">Bill to</label>
                     <input className="input" id="in-cust" type="text" value={customer} onChange={(e) => setCustomer(e.target.value)} placeholder="Lagos Freight Co" />
                   </div>
                   <div className="field" style={{ flex: '1 1 220px' }}>

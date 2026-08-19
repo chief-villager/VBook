@@ -84,4 +84,12 @@ public sealed class TransactionService : ITransactionService
         var categories = await _repository.GetCategoriesAsync(ct);
         return categories.Select(c => new CategoryDto(c.Id, c.Name, c.Type)).ToList();
     }
+
+    public async Task<Result<DateOnly>> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default)
+    {
+        var transactions = await _repository.GetEarliestTransactionDateAsync(businessId, ct);
+        if (transactions is null)
+            return Result<DateOnly>.Failure("No transactions found for the business.");
+        return transactions;
+    }
 }

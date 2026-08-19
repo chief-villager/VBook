@@ -21,6 +21,7 @@ public sealed class InvoiceController(
     public sealed record CreateInvoiceRequest(
         DateOnly DueDate,
         string BillTo,
+        string? CustomerEmail,
         decimal VatRate,
         string? Note,
         IReadOnlyList<InvoiceLineItemDto> LineItems);
@@ -31,7 +32,7 @@ public sealed class InvoiceController(
     {
         var command = new CreateInvoiceCommand(
             new BusinessId(businessId),
-            body.DueDate, body.BillTo, body.Note, body.VatRate, body.LineItems);
+            body.DueDate, body.BillTo, body.CustomerEmail, body.Note, body.VatRate, body.LineItems);
         var result = await invoices.CreateAsync(command, ct);
         return result.IsSuccess
             ? Ok(new { invoiceId = result.Value.Value })

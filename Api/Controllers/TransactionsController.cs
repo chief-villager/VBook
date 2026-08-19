@@ -41,4 +41,12 @@ public sealed class TransactionsController(ITransactionService transactions) : C
         CancellationToken ct = default)
         => Ok(await transactions.ListPagedAsync(
             new BusinessId(businessId), new DateRange(from, to), new PageRequest(page, pageSize), ct));
+
+    
+    [Authorize(Policy = Permissions.Transactions.Read)]
+    [HttpGet("transactions/earliest")]
+    public async Task<IActionResult> GetEarliestTransactionDate(
+        Guid businessId,
+        CancellationToken ct = default)
+        => Ok(await transactions.GetEarliestTransactionDateAsync(new BusinessId(businessId), ct));
 }
