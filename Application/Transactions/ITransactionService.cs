@@ -1,5 +1,6 @@
 using Bookkeeping.Application.Common;
 using Bookkeeping.Domain.Common;
+using Bookkeeping.Domain.Transactions;
 
 namespace Bookkeeping.Application.Transactions;
 
@@ -16,5 +17,5 @@ public interface ITransactionService
         BusinessId businessId, DateRange period, PageRequest page, CancellationToken ct = default);
 
     Task<IReadOnlyList<CategoryDto>> GetCategoriesAsync(BusinessId businessId, CancellationToken ct = default);
-    Task<Result<DateOnly>> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default);
+    Task<Result<Transaction>> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default);
 }

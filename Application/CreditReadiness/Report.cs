@@ -38,3 +38,26 @@ public sealed record CreditReadinessDashBoard(
     int NumberOfTransactions,
     int MonthsOfHistory,
     int NumberOfInvoices);
+
+public enum Rating
+{
+    Weak = 25,
+    ModerateSignal = 50,
+    StrongSignal = 75,
+    VeryStrongSignal = 100,
+    NotObservable = 0
+}
+public sealed record FiveCsRating( 
+   List<CreditFactorRating> Ratings,
+   string recordKeepingScore,
+   string obeservableStrengthScore
+   
+);
+
+public sealed record CreditFactorRating(
+    CreditFactor Factor,
+    Rating Rating,
+    string Description,
+    string SuggestedAction,
+    int Score
+);

@@ -11,7 +11,7 @@ public interface ITransactionRepository : IGenericRepository<Transaction>
     // Full set for the period — used where every row is needed (e.g. credit scoring).
     Task<IReadOnlyList<Transaction>> ListAsync(BusinessId businessId, DateRange period, CancellationToken ct = default);
 
-    Task<DateOnly?> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default);
+    Task<Transaction?> GetEarliestTransactionDateAsync(BusinessId businessId, CancellationToken ct = default);
 
     // One page of the period's transactions, newest first, with the total count.
     Task<PagedResult<Transaction>> ListPagedAsync(

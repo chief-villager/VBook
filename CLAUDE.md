@@ -180,17 +180,23 @@ identical for every business. Per-business customization is **out of scope**.
 
 ## Known gaps / not implemented
 
-- **Authorization is route-scoped, not resource-scoped (IDOR).** Enforcement is now
-  wired — every endpoint requires authentication (deny-by-default) and business
-  actions carry `[Authorize(Policy = ...)]` permission checks keyed on the route's
-  `businessId`. The remaining gap: the handler proves the caller has the permission
-  for the `businessId` **in the route**, but the services still load invoices, staged
-  bank rows, and linked accounts by their **own id** without confirming that resource
-  belongs to that business. So a caller with rights on business A can pass their own
-  `businessId` in the route alongside an `invoiceId`/`stagedId`/`accountId` from
-  business B and operate on it. Closing this is the `EnsureOwnershipAsync` /
-  resource-scoping work (still **not called anywhere**). The anonymous onboarding
-  endpoints also still trust the `ownerId` in the body.
+- **Authorization: route-level and resource-level are both wired; coverage isn't
+  enforced centrally.** Two layers exist. (1) Route/permission-level: every endpoint
+  requires authentication (deny-by-default) and business actions carry
+  `[Authorize(Policy = ...)]` checks keyed on the route's `businessId`. (2)
+  Resource-level (the former IDOR gap, now closed for the services that need it):
+  `ResourceOwnership.RequireOwned` (`Application/Common/ResourceOwnership.cs`) verifies
+  a resource loaded **by its own id** actually belongs to the route's business, keyed on
+  the `IBusinessScoped.BusinessId` (`Domain/Common/IBusinessScoped.cs`); a missing
+  resource and one owned by another business return the identical "not found" so callers
+  can't probe across businesses. It's called in `InvoiceService` (get / mark-paid),
+  `BankImportService` (the staged-import actions), and `BankAccountService` — so a
+  caller with rights on business A can no longer operate on an `invoiceId`/`stagedId`/
+  `accountId` from business B. Remaining caveats: coverage is **by convention, not
+  enforced** — any new service that loads a resource by its own id must remember to call
+  `RequireOwned` (nothing central guarantees it); services that only query *by* the
+  route `businessId` (Reporting, CreditReadiness) are safe by construction and don't use
+  it; and the anonymous onboarding endpoints still trust the `ownerId` in the body.
 - **Bank feed webhook auth is secret-header only, not HMAC.** The Mono bank feed
   is implemented end to end — link (`BankAccountsController` → `BankAccountService`
   exchanges the widget code via `IBankFeedProvider`/`MonoBankFeedProvider`), pull +
