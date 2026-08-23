@@ -197,14 +197,21 @@ identical for every business. Per-business customization is **out of scope**.
   `RequireOwned` (nothing central guarantees it); services that only query *by* the
   route `businessId` (Reporting, CreditReadiness) are safe by construction and don't use
   it; and the anonymous onboarding endpoints still trust the `ownerId` in the body.
-- **Bank feed webhook auth is secret-header only, not HMAC.** The Mono bank feed
-  is implemented end to end — link (`BankAccountsController` → `BankAccountService`
-  exchanges the widget code via `IBankFeedProvider`/`MonoBankFeedProvider`), pull +
-  stage + approve/discard into the ledger (`BankImportsController` →
-  `BankImportService`, `StagedBankTransaction`), and `MonoWebhookController`. The Mono
-  config section is present in `appsettings.example.json`. The remaining caveat: the
-  webhook authenticates with a shared **secret header**, not an HMAC signature, so it
-  doesn't verify the payload came from Mono unmodified.
+- **Bank feed webhook auth is a shared secret — Mono's only option, not a payload
+  signature.** The Mono bank feed is implemented end to end — link
+  (`BankAccountsController` → `BankAccountService` exchanges the widget code via
+  `IBankFeedProvider`/`MonoBankFeedProvider`), pull + stage + approve/discard into the
+  ledger (`BankImportsController` → `BankImportService`, `StagedBankTransaction`), and
+  `MonoWebhookController`. The Mono config section is present in
+  `appsettings.example.json`. Mono authenticates webhooks by echoing the configured
+  secret in a static `mono-webhook-secret` header ("It should match the secret you
+  passed when creating the webhook") and offers **no HMAC/signature scheme**, so
+  `MonoWebhookController` compares that header to `MonoOptions.WebhookSecret` in
+  **constant time** (`CryptographicOperations.FixedTimeEquals`). This is the provider's
+  ceiling, not an incomplete implementation: the endpoint can confirm the caller knows
+  the secret but can't cryptographically verify the body is unmodified. Residual risk:
+  if the secret leaks (logs/proxy/misconfig) webhooks can be forged — mitigate by
+  rotating the secret and keeping the endpoint's side effects low-trust.
 - **CORS is wide open (`AllowAnyOrigin`).** `Program.cs` defines a default policy
   with `AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()` and applies it via
   `app.UseCors()`. This unblocks the `frontend/` SPA from any origin, but is too
