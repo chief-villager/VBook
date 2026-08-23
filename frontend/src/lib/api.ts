@@ -23,7 +23,9 @@ export class ApiError extends Error {
 }
 
 interface ApiOptions extends Omit<RequestInit, 'body'> {
-  /** Plain object — serialized as JSON. Omit for GET/DELETE without a body. */
+  /** Plain object — serialized as JSON. Pass a FormData to send multipart (e.g. a
+   *  file upload); the browser sets its own Content-Type + boundary. Omit for
+   *  GET/DELETE without a body. */
   body?: unknown
   /** Set false for endpoints that must be called without a token (login, register). */
   auth?: boolean
@@ -82,8 +84,12 @@ function errorMessage(payload: unknown, status: number): string {
 export async function api<T = unknown>(path: string, options: ApiOptions = {}): Promise<T> {
   const { body, auth = true, headers, _retry, ...rest } = options
 
+  // FormData carries its own multipart Content-Type (with a boundary the browser
+  // fills in), so we only set the JSON header — and only JSON-serialize — for plain
+  // object bodies.
+  const isForm = body instanceof FormData
   const finalHeaders = new Headers(headers)
-  if (body !== undefined) finalHeaders.set('Content-Type', 'application/json')
+  if (body !== undefined && !isForm) finalHeaders.set('Content-Type', 'application/json')
 
   if (auth) {
     const token = getAccessToken()
@@ -93,7 +99,7 @@ export async function api<T = unknown>(path: string, options: ApiOptions = {}): 
   const response = await fetch(`${BASE_URL}${path}`, {
     ...rest,
     headers: finalHeaders,
-    body: body !== undefined ? JSON.stringify(body) : undefined,
+    body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
   })
 
   // Access token expired mid-session: silently refresh once and replay the request.

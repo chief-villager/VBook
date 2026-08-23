@@ -10,7 +10,7 @@ import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { logout } from '../lib/identity'
 
-export type Section = 'dashboard' | 'transactions' | 'invoices' | 'ledger' | 'reports' | 'credit'
+export type Section = 'dashboard' | 'transactions' | 'invoices' | 'ledger' | 'reports' | 'credit' | 'settings'
 
 // Report sub-tabs, revealed under "Reports" in the sidebar. Keys map to the
 // /reports/:tab route.
@@ -40,6 +40,7 @@ const NAV: NavItem[] = [
   { id: 'ledger', label: 'Ledger', icon: svg(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>) },
   { id: 'reports', label: 'Reports', icon: svg(<><path d="M3 3v18h18" /><rect x="7" y="11" width="3" height="7" /><rect x="13" y="7" width="3" height="11" /></>) },
   { id: 'credit', label: 'Credit Readiness', icon: svg(<><path d="M12 2 4 6v6c0 5 3.4 8.7 8 10 4.6-1.3 8-5 8-10V6z" /><path d="m9 12 2 2 4-4" /></>) },
+  { id: 'settings', label: 'Settings', icon: svg(<><circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6h.09A1.65 1.65 0 0 0 10 3.09V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v.09a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" /></>) },
 ]
 
 // Shared look for every top-level sidebar button (background/colour set per item).
@@ -64,7 +65,16 @@ interface AppShellProps {
   showTerms: boolean
   onToggleTerms: () => void
   businessName?: string
+  userName?: string
   children: ReactNode
+}
+
+// "Adaeze Okafor" -> "AO"; a single word yields its first two letters.
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '—'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
 }
 
 export default function AppShell({
@@ -74,6 +84,7 @@ export default function AppShell({
   showTerms,
   onToggleTerms,
   businessName = 'Okafor Logistics Ltd',
+  userName = 'Adaeze Okafor',
   children,
 }: AppShellProps) {
   const navigate = useNavigate()
@@ -233,14 +244,15 @@ export default function AppShell({
               fontSize: 15,
             }}
           >
-            AO
+            {initials(userName)}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25, minWidth: 0 }}>
             <span style={{ fontSize: 13.5, color: '#fff', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {businessName}
             </span>
-            {/* TODO: signed-in user name from the session once auth is wired. */}
-            <span style={{ fontSize: 11.5, color: 'var(--color-accent-400)' }}>Adaeze Okafor</span>
+            <span style={{ fontSize: 11.5, color: 'var(--color-accent-400)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {userName}
+            </span>
           </div>
           <button
             onClick={signOut}

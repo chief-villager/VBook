@@ -4,7 +4,7 @@
 import { useState } from 'react'
 import AppShell, { type Section } from '../components/AppShell.tsx'
 
-type Placeholder = Exclude<Section, 'transactions' | 'dashboard' | 'invoices' | 'ledger' | 'reports'>
+type Placeholder = Exclude<Section, 'transactions' | 'dashboard' | 'invoices' | 'ledger' | 'reports' | 'settings'>
 
 const META: Record<Placeholder, { title: string; kicker: string }> = {
   credit: { title: 'Credit Readiness', kicker: 'Getting loan-ready' },

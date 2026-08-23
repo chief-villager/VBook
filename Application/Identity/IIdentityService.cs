@@ -20,6 +20,10 @@ public interface IIdentityService
         BusinessRole role, CancellationToken ct = default);
 
     Task<Result<IReadOnlyList<BusinessMemberDto>>> ListMembersAsync(BusinessId businessId, CancellationToken ct = default);
+
+    // The currently authenticated user, resolved from their id (the JWT subject),
+    // with the businesses they belong to.
+    Task<Result<CurrentUserDto>> GetCurrentUserAsync(UserId userId, CancellationToken ct = default);
     Task<Result<BusinessContext>> GetBusinessAsync(BusinessId businessId, CancellationToken ct = default);
     Task<Result> EnsureOwnershipAsync(UserId userId, BusinessId businessId, CancellationToken ct = default);
     // Uploads the logo to object storage and stores the resulting URL. The caller

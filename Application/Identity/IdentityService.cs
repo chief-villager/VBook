@@ -146,6 +146,24 @@ public sealed class IdentityService : IIdentityService
         return members;
     }
 
+    public async Task<Result<CurrentUserDto>> GetCurrentUserAsync(UserId userId, CancellationToken ct = default)
+    {
+        var user = await _repository.GetUserAsync(userId, ct);
+        if (user is null)
+            return Result<CurrentUserDto>.Failure("User not found.");
+
+        var memberships = await _repository.ListMembershipsForUserAsync(userId, ct);
+
+        var list = new List<UserMembershipDto>(memberships.Count);
+        foreach (var m in memberships)
+        {
+            var business = await _repository.GetBusinessAsync(m.BusinessId, ct);
+            list.Add(new UserMembershipDto(m.BusinessId, business?.Name ?? string.Empty, m.Role, m.JoinedAt));
+        }
+
+        return new CurrentUserDto(user.Id, user.Email, user.DisplayName, list);
+    }
+
     public async Task<Result<BusinessContext>> GetBusinessAsync(BusinessId businessId, CancellationToken ct = default)
     {
         var business = await _repository.GetBusinessAsync(businessId, ct);
