@@ -4,6 +4,7 @@ using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Security.Claims;
 
 namespace Bookkeeping.Api.Controllers;
 
@@ -162,6 +163,22 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
         return result.IsSuccess
             ? Ok(new { userId = result.Value.Value })
             : BadRequest(new { error = result.Error });
+    }
+
+    // The caller's own profile and memberships, keyed off the JWT subject. Any
+    // authenticated user may read themselves, so no permission policy — just the
+    // deny-by-default authentication baseline.
+    [HttpGet("api/users/me")]
+    public async Task<IActionResult> GetCurrentUser(CancellationToken ct)
+    {
+        // "sub" maps to NameIdentifier under the default inbound claim mapping; fall
+        // back to the raw claim in case mapping is ever turned off.
+        var sub = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub");
+        if (!Guid.TryParse(sub, out var userId))
+            return Unauthorized();
+
+        var result = await identity.GetCurrentUserAsync(new UserId(userId), ct);
+        return result.IsSuccess ? Ok(result.Value) : NotFound(new { error = result.Error });
     }
 
     [Authorize(Policy = Permissions.Users.Read)]

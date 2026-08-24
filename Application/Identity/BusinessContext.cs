@@ -24,3 +24,17 @@ public sealed record InvoiceTemplateDto(
     string AccountNumber,
     string BankName,
     string Terms);
+
+// The authenticated caller's own profile plus every business they belong to (with the
+// role that business grants them). Backs the "who am I" endpoint the SPA calls after login.
+public sealed record CurrentUserDto(
+    UserId UserId,
+    string Email,
+    string DisplayName,
+    IReadOnlyList<UserMembershipDto> Memberships);
+
+public sealed record UserMembershipDto(
+    BusinessId BusinessId,
+    string BusinessName,
+    BusinessRole Role,
+    DateTimeOffset JoinedAt);
