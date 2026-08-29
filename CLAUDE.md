@@ -246,6 +246,20 @@ identical for every business. Per-business customization is **out of scope**.
   the `UPDLOCK, READPAST` of the outbox above — READPAST skips locked rows, which is
   right for a queue of interchangeable jobs but wrong for a single row every create
   must serialise on.
+- **Setting an invoice template a second time fails — updates aren't handled.**
+  `InvoiceTemplate` is a real entity keyed on `BusinessId` (shared PK, one row per
+  business; `InvoiceTemplateConfiguration`). But `IdentityService.SetInvoiceTemplateAsync`
+  loads the business via `IdentityRepository.GetBusinessAsync`, which does **not**
+  `.Include(b => b.Template)`, so an existing template row is never loaded or tracked.
+  `Business.SetTemplate` then always does `Template = new InvoiceTemplate(...)` (it never
+  mutates an existing one), so EF sees the new instance as **Added** and emits an
+  `INSERT`. The first set works; any subsequent set hits the existing `BusinessId` PK and
+  throws a duplicate-key exception — there is no upsert path. Worse, the R2 logo is
+  uploaded (`_objectStore.PutAsync`) **before** the failed `SaveChangesAsync`, so a failed
+  update **orphans the uploaded object**. Fix: `.Include(b => b.Template)` on load and have
+  `SetTemplate` update the existing instance in place (add `InvoiceTemplate.Update`) when
+  one is present, and upload the logo only after the domain call succeeds (or clean it up
+  on failure).
 
 ## Conventions
 
