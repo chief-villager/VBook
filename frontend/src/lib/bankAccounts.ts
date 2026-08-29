@@ -3,7 +3,7 @@
 // pulls against. A session is required; the caller's role must grant
 // BankAccounts.Manage to link and BankAccounts.Read to list.
 
-import { get, post } from './api'
+import { get, post, del } from './api'
 
 // Mirrors Application/Transactions/Dtos.cs `LinkedBankAccountDto`. `id` is the API's
 // strongly-typed id, serialized as { value }; `status` is the enum's ordinal
@@ -25,4 +25,10 @@ export function linkBankAccount(businessId: string, authorisationCode: string) {
 
 export function listBankAccounts(businessId: string) {
   return get<LinkedBankAccount[]>(`/api/businesses/${businessId}/bank-accounts`)
+}
+
+// Disconnects a linked account from the feed. Returns 204 No Content on success.
+// Requires BankAccounts.Manage.
+export function unlinkBankAccount(businessId: string, accountId: string) {
+  return del<void>(`/api/businesses/${businessId}/bank-accounts/${accountId}`)
 }

@@ -5,9 +5,10 @@
 //
 // On mount it loads this month's Profit & Loss for the signed-in user's business
 // (from the 1st of the current month through today) and drives the profit card and
-// split donut from it. Visuals come from src/styles/industry.css. The remaining
-// figures are still the prototype's mock values; TODOs mark where real data comes from:
-//   review banner  -> count of Pending bank-imports
+// split donut from it. Visuals come from src/styles/industry.css. It also loads the
+// count of Pending bank-imports and, when there are any, shows a review nudge at the
+// top of the page. The remaining figures are still the prototype's mock values; a TODO
+// marks where real data comes from:
 //   credit card    -> credit-readiness checklist state
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
@@ -16,13 +17,11 @@ import AppShell from '../components/AppShell.tsx'
 import { ApiError } from '../lib/api'
 import { getBusinessId } from '../lib/auth'
 import { getProfitAndLoss, type ProfitAndLoss } from '../lib/reporting'
-import { linkBankAccount, listBankAccounts, type LinkedBankAccount } from '../lib/bankAccounts'
+import { linkBankAccount, listBankAccounts, unlinkBankAccount, type LinkedBankAccount } from '../lib/bankAccounts'
+import { listStagedImports } from '../lib/transactions'
 import { MonoNotConfiguredError, openMonoConnect } from '../lib/mono'
 
 const NAIRA = '₦'
-
-// TODO: source from the count of Pending bank-imports.
-const REVIEW_COUNT = 12
 
 const cornerMarks = (
   <>
@@ -65,10 +64,16 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null)
 
   // Linked bank accounts drive the connection banner. `linking` covers the widget +
-  // code exchange so the button can show progress and block double-clicks.
+  // code exchange so the button can show progress and block double-clicks; `unlinking`
+  // does the same for the disconnect action.
   const [banks, setBanks] = useState<LinkedBankAccount[] | null>(null)
   const [linking, setLinking] = useState(false)
+  const [unlinking, setUnlinking] = useState(false)
   const [bankError, setBankError] = useState<string | null>(null)
+
+  // Count of Pending bank-imports awaiting review. null until loaded; the review
+  // banner only shows once we know there is at least one waiting.
+  const [reviewCount, setReviewCount] = useState<number | null>(null)
 
   // Fixed at mount (≈ login time): 1st of the current month → today.
   const period = useMemo(() => {
@@ -126,6 +131,23 @@ export default function Dashboard() {
     }
   }, [businessId])
 
+  // Pending review queue count. We only need the total, so pull the smallest page.
+  useEffect(() => {
+    if (!businessId) return
+    let cancelled = false
+    listStagedImports(businessId, 1, 1)
+      .then((data) => {
+        if (!cancelled) setReviewCount(data.totalCount)
+      })
+      .catch(() => {
+        // Non-fatal; the banner simply stays hidden.
+        if (!cancelled) setReviewCount(0)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [businessId])
+
   // Opens the Mono widget; on a successful link, exchanges the returned code for a
   // durable account via the API, then refreshes the banner from the server.
   function handleAddBank() {
@@ -149,6 +171,26 @@ export default function Dashboard() {
       setBankError(
         err instanceof MonoNotConfiguredError ? err.message : 'Could not open the bank connection.',
       )
+    }
+  }
+
+  // Disconnects the (first) linked account, then refreshes the banner from the server.
+  // Confirms first, since unlinking stops the automatic bank feed.
+  async function handleUnlinkBank() {
+    if (!businessId || unlinking || !banks || banks.length === 0) return
+    const proceed = window.confirm(
+      `Unlink ${banks[0].institutionName}? This stops the automatic bank feed for this account.`,
+    )
+    if (!proceed) return
+    setBankError(null)
+    setUnlinking(true)
+    try {
+      await unlinkBankAccount(businessId, banks[0].id.value)
+      setBanks(await listBankAccounts(businessId))
+    } catch (err) {
+      setBankError(err instanceof ApiError ? err.message : 'Could not unlink that account.')
+    } finally {
+      setUnlinking(false)
     }
   }
 
@@ -176,6 +218,42 @@ export default function Dashboard() {
       onToggleTerms={() => setShowTerms((s) => !s)}
     >
       <div style={{ padding: '30px 40px 48px 40px', display: 'flex', flexDirection: 'column', gap: 30 }}>
+        {/* Review nudge — only when the bank feed has staged rows awaiting review.
+            Kept at the top so it's the first thing seen after sign-in. */}
+        {reviewCount !== null && reviewCount > 0 && (
+          <section
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '16px 22px',
+              alignItems: 'center',
+              border: '1px solid var(--color-accent)',
+              background: 'var(--color-accent-100)',
+              padding: '18px 22px',
+            }}
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 20px' }}>
+              <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
+            </svg>
+            <div style={{ flex: '1 1 320px', minWidth: 240 }}>
+              <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 20, marginBottom: 3 }}>
+                {reviewCount === 1
+                  ? '1 transaction is waiting for you'
+                  : `${reviewCount} transactions are waiting for you`}
+              </div>
+              <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--color-neutral-700)' }}>
+                Your bank feed brought {reviewCount === 1 ? 'it' : 'them'} in automatically. vbook just needs to know what each one was for.
+                {showTerms && <span style={{ color: 'var(--color-neutral-500)' }}>&nbsp;&middot; Uncategorised and unreconciled entries</span>}
+              </p>
+            </div>
+            <button onClick={() => navigate('/transactions')} className="btn btn-primary blueprint" style={{ position: 'relative', flex: '0 0 auto' }}>
+              {cornerMarks}
+              Go to Transactions
+            </button>
+          </section>
+        )}
+
         {/* Bank connection banner */}
         <section
           className="card blueprint"
@@ -209,14 +287,32 @@ export default function Dashboard() {
               `${banks.length} bank accounts connected`
             )}
           </span>
-          <button
-            onClick={handleAddBank}
-            disabled={linking || !businessId}
-            className="btn btn-ghost"
-            style={{ flex: '0 0 auto', fontSize: 13, opacity: linking ? 0.7 : 1 }}
-          >
-            {linking ? 'Connecting…' : 'Add a bank account'}
-          </button>
+          {banks && banks.length > 0 ? (
+            <button
+              onClick={handleUnlinkBank}
+              disabled={unlinking || !businessId}
+              className="btn"
+              style={{
+                flex: '0 0 auto',
+                fontSize: 13,
+                background: 'var(--color-danger, #b42318)',
+                color: '#fff',
+                borderColor: 'var(--color-danger, #b42318)',
+                opacity: unlinking ? 0.7 : 1,
+              }}
+            >
+              {unlinking ? 'Unlinking…' : 'Unlink'}
+            </button>
+          ) : (
+            <button
+              onClick={handleAddBank}
+              disabled={linking || !businessId}
+              className="btn btn-primary"
+              style={{ flex: '0 0 auto', fontSize: 13, opacity: linking ? 0.7 : 1 }}
+            >
+              {linking ? 'Connecting…' : 'Add a bank account'}
+            </button>
+          )}
         </section>
 
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 26, alignItems: 'stretch' }}>
@@ -381,37 +477,6 @@ export default function Dashboard() {
               See what lenders will see
             </button>
           </div>
-        </section>
-
-        {/* Review nudge */}
-        <section
-          style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '16px 22px',
-            alignItems: 'center',
-            border: '1px solid var(--color-accent)',
-            background: 'var(--color-accent-100)',
-            padding: '18px 22px',
-          }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 20px' }}>
-            <path d="M10.3 21a1.94 1.94 0 0 0 3.4 0" />
-            <path d="M18 8a6 6 0 0 0-12 0c0 7-3 8-3 8h18s-3-1-3-8" />
-          </svg>
-          <div style={{ flex: '1 1 320px', minWidth: 240 }}>
-            <div style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 20, marginBottom: 3 }}>
-              {REVIEW_COUNT} transactions are waiting for you
-            </div>
-            <p style={{ margin: 0, fontSize: 14, lineHeight: 1.5, color: 'var(--color-neutral-700)' }}>
-              Your bank feed brought them in automatically. vbook just needs to know what each one was for &mdash; about 6 minutes of work.
-              {showTerms && <span style={{ color: 'var(--color-neutral-500)' }}>&nbsp;&middot; Uncategorised and unreconciled entries</span>}
-            </p>
-          </div>
-          <button onClick={() => navigate('/transactions')} className="btn btn-primary blueprint" style={{ position: 'relative', flex: '0 0 auto' }}>
-            {cornerMarks}
-            Go to Transactions
-          </button>
         </section>
       </div>
     </AppShell>
