@@ -1,22 +1,13 @@
 // Sign-in — the returning-user counterpart to Onboarding. Collects email and
 // password and calls `login`, which stores the session (access token in memory,
 // refresh token persisted), then routes to the dashboard. Visuals reuse the
-// blueprint card + corner-mark language from src/styles/industry.css so it sits
+// blueprint card language from src/styles/industry.css so it sits
 // alongside the onboarding flow.
 
 import { useState, type CSSProperties } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ApiError } from '../lib/api'
 import { login } from '../lib/identity'
-
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
 
 export default function SignIn() {
   const navigate = useNavigate()
@@ -98,7 +89,6 @@ export default function SignIn() {
           }}
           style={{ position: 'relative', width: '100%', maxWidth: 460, padding: '38px 40px 34px 40px' }}
         >
-          {cornerMarks}
 
           <div style={kickerStyle}>Welcome back</div>
           <h1 style={headingStyle}>Sign in to your books</h1>
@@ -142,7 +132,6 @@ export default function SignIn() {
             className="btn btn-primary btn-block blueprint"
             style={{ position: 'relative', opacity: submitting ? 0.7 : 1 }}
           >
-            {cornerMarks}
             {submitting ? 'Signing you in…' : 'Sign in'}
           </button>
 

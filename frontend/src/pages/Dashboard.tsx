@@ -23,15 +23,6 @@ import { MonoNotConfiguredError, openMonoConnect } from '../lib/mono'
 
 const NAIRA = '₦'
 
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
-
 // Local-date yyyy-MM-dd (the API binds these to DateOnly). Local, not UTC, so "today"
 // matches the user's calendar day.
 function toDateParam(d: Date): string {
@@ -228,6 +219,7 @@ export default function Dashboard() {
               gap: '16px 22px',
               alignItems: 'center',
               border: '1px solid var(--color-accent)',
+              borderRadius: 'var(--radius-lg)',
               background: 'var(--color-accent-100)',
               padding: '18px 22px',
             }}
@@ -248,7 +240,6 @@ export default function Dashboard() {
               </p>
             </div>
             <button onClick={() => navigate('/transactions')} className="btn btn-primary blueprint" style={{ position: 'relative', flex: '0 0 auto' }}>
-              {cornerMarks}
               Go to Transactions
             </button>
           </section>
@@ -268,7 +259,6 @@ export default function Dashboard() {
             background: 'transparent',
           }}
         >
-          {cornerMarks}
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-700)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ flex: '0 0 16px' }}>
             <rect x="3" y="6" width="18" height="13" />
             <path d="M3 10h18" />
@@ -318,7 +308,6 @@ export default function Dashboard() {
         <section style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 26, alignItems: 'stretch' }}>
           {/* Profit card */}
           <div className="card blueprint" style={{ position: 'relative', padding: '26px 26px 24px 26px' }}>
-            {cornerMarks}
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 16, marginBottom: 22 }}>
               <h2 style={{ ...heading, fontSize: 23 }}>Are you making money this month?</h2>
               <span style={{ fontSize: 12.5, color: 'var(--color-neutral-600)' }}>{period.rangeLabel}</span>
@@ -421,7 +410,6 @@ export default function Dashboard() {
 
           {/* Credit readiness card */}
           <div className="card blueprint" style={{ position: 'relative', padding: 26, display: 'flex', flexDirection: 'column' }}>
-            {cornerMarks}
             <div style={{ fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-neutral-600)', marginBottom: 10 }}>
               Credit readiness
             </div>
@@ -460,6 +448,7 @@ export default function Dashboard() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       border: '1px solid var(--color-accent)',
+                      borderRadius: '50%',
                       color: 'var(--color-accent-800)',
                     }}
                   >

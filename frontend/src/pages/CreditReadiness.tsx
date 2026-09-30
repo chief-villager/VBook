@@ -44,15 +44,6 @@ function formatDate(iso: string): string {
   return new Date(y, m - 1, d).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
-
 type Period = '3' | '6' | 'custom'
 
 // The evaluation returns a single-element list; the page reads the first entry.
@@ -156,7 +147,6 @@ export default function CreditReadiness() {
           className="card blueprint"
           style={{ position: 'relative', padding: '26px 28px', display: 'flex', flexDirection: 'column', gap: 16 }}
         >
-          {cornerMarks}
           <div style={{ fontSize: 11.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>
             How far you have come
           </div>
@@ -188,7 +178,6 @@ export default function CreditReadiness() {
           className="card blueprint"
           style={{ position: 'relative', padding: '26px 28px', display: 'flex', flexDirection: 'column', gap: 18 }}
         >
-          {cornerMarks}
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 18, alignItems: 'center', justifyContent: 'space-between' }}>
             <div>
               <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 24, margin: '0 0 5px 0' }}>
@@ -238,7 +227,6 @@ export default function CreditReadiness() {
 
               {/* Readiness card */}
               <div className="card blueprint" style={{ position: 'relative', padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 0 }}>
-                {cornerMarks}
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                   <span style={{ fontSize: 11.5, letterSpacing: '0.16em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>
                     Credit readiness
@@ -296,6 +284,7 @@ export default function CreditReadiness() {
                                 height: 34,
                                 flex: '0 0 34px',
                                 border: `1px ${r.rating === 0 ? 'dashed' : 'solid'} ${r.rating === 0 ? 'var(--color-neutral-400)' : 'var(--color-accent)'}`,
+                                borderRadius: 'var(--radius-md)',
                                 background: r.rating === 0 ? 'transparent' : 'var(--color-accent-100)',
                                 color: r.rating === 0 ? 'var(--color-neutral-600)' : 'var(--color-accent-800)',
                                 display: 'flex',
@@ -326,7 +315,7 @@ export default function CreditReadiness() {
                       </div>
                     </div>
 
-                    <div style={{ marginTop: 18, border: '1px solid var(--color-divider)', padding: '12px 14px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
+                    <div style={{ marginTop: 18, border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: '12px 14px', fontSize: 12.5, lineHeight: 1.55, color: 'var(--color-neutral-700)' }}>
                       Based on what you have recorded, this is how a lender may view your business today. It is not an approval or an offer.
                     </div>
                   </>
@@ -356,12 +345,12 @@ function verdict(strength: number): string {
 
 function MeterCard({ label, pct, note, color }: { label: string; pct: number; note: string; color: string }) {
   return (
-    <div style={{ border: '1px solid var(--color-divider)', padding: '14px 16px' }}>
+    <div style={{ border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-lg)', padding: '14px 16px' }}>
       <div style={{ fontSize: 12, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-neutral-600)', marginBottom: 10 }}>
         {label}
       </div>
-      <div style={{ height: 6, background: 'var(--color-neutral-300)', marginBottom: 10 }}>
-        <div style={{ height: 6, background: color, width: `${pct}%` }} />
+      <div style={{ height: 6, background: 'var(--color-neutral-300)', borderRadius: 999, overflow: 'hidden', marginBottom: 10 }}>
+        <div style={{ height: 6, background: color, borderRadius: 999, width: `${pct}%` }} />
       </div>
       <div style={{ fontSize: 13.5, color: 'var(--color-neutral-700)' }}>
         <span style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 15, color: 'var(--color-text)' }}>{pct}%</span> — {note}
@@ -380,6 +369,7 @@ function ToggleButton({ label, active, onClick }: { label: string; active: boole
         fontSize: 14.5,
         cursor: 'pointer',
         border: `1px solid ${active ? 'var(--color-accent-700)' : 'var(--color-neutral-400)'}`,
+        borderRadius: 'var(--radius-md)',
         background: active ? 'var(--color-accent-700)' : 'transparent',
         color: active ? '#ffffff' : 'var(--color-text)',
       }}

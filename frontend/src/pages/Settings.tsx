@@ -22,15 +22,6 @@ import {
   type UserMembership,
 } from '../lib/identity'
 
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
-
 // What each role can do, shown under the role row so the user knows their access.
 function roleNote(role: string): string {
   switch (role) {
@@ -188,7 +179,6 @@ export default function Settings() {
           <>
             {/* Account card. */}
             <section className="card blueprint" style={{ position: 'relative', padding: '28px 28px 26px 28px' }}>
-              {cornerMarks}
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px 24px', marginBottom: 26 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16, minWidth: 0 }}>
                   <div
@@ -196,6 +186,7 @@ export default function Settings() {
                       width: 60,
                       height: 60,
                       flex: '0 0 60px',
+                      borderRadius: '50%',
                       background: 'var(--color-accent)',
                       color: '#fff',
                       display: 'flex',
@@ -249,7 +240,6 @@ export default function Settings() {
 
             {/* Invoice template card. */}
             <section className="card blueprint" style={{ position: 'relative', padding: 28 }}>
-              {cornerMarks}
               <div style={{ fontSize: 12, letterSpacing: '0.14em', textTransform: 'uppercase', color: 'var(--color-neutral-600)', marginBottom: 10 }}>
                 Invoices
               </div>
@@ -265,9 +255,8 @@ export default function Settings() {
                   </div>
                   <label
                     className="blueprint"
-                    style={{ position: 'relative', display: 'block', border: '1px solid var(--color-divider)', padding: 10, cursor: 'pointer' }}
+                    style={{ position: 'relative', display: 'block', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', padding: 10, cursor: 'pointer' }}
                   >
-                    {cornerMarks}
                     <div
                       style={{
                         width: '100%',
@@ -276,6 +265,7 @@ export default function Settings() {
                         alignItems: 'center',
                         justifyContent: 'center',
                         background: 'var(--color-neutral-100)',
+                        borderRadius: 'var(--radius-sm)',
                         overflow: 'hidden',
                       }}
                     >
@@ -327,7 +317,6 @@ export default function Settings() {
 
               <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, paddingTop: 24 }}>
                 <button onClick={saveTemplate} disabled={saving} className="btn btn-primary blueprint" style={{ position: 'relative', opacity: saving ? 0.6 : 1 }}>
-                  {cornerMarks}
                   {saving ? 'Saving…' : 'Save as default'}
                 </button>
                 {saveError ? (

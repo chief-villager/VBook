@@ -81,15 +81,6 @@ const statusStyle = (st: Pill): { bg: string; color: string; border: string } =>
   }
 }
 
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
-
 type View = 'create' | 'list'
 
 export default function Invoices() {
@@ -341,7 +332,6 @@ export default function Invoices() {
               {/* Actions */}
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', borderTop: '1px solid var(--color-divider)', paddingTop: 18 }}>
                 <button onClick={submitInvoice} disabled={submitting} className="btn btn-primary blueprint" style={{ position: 'relative', opacity: submitting ? 0.6 : 1 }}>
-                  {cornerMarks}
                   {submitting ? 'Creating…' : 'Create invoice'}
                 </button>
                 <span style={{ fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
@@ -358,8 +348,7 @@ export default function Invoices() {
             {listLoading && !list ? (
               <EmptyCard message="Loading your invoices…" />
             ) : invoices.length > 0 ? (
-              <div className="card blueprint" style={{ position: 'relative', padding: 0, opacity: listLoading ? 0.6 : 1 }}>
-                {cornerMarks}
+              <div className="card blueprint flush" style={{ position: 'relative', padding: 0, opacity: listLoading ? 0.6 : 1 }}>
                 <div style={{ overflowX: 'auto' }}>
                   <div style={{ ...listRow, ...listHead, minWidth: 900 }}>
                     <span style={{ flex: '0 0 90px' }}>Number</span>
@@ -380,7 +369,7 @@ export default function Invoices() {
                         <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{formatDay(inv.issueDate)}</span>
                         <span style={{ flex: '0 0 90px', fontSize: 13.5, color: 'var(--color-neutral-600)' }}>{formatDay(inv.dueDate)}</span>
                         <span style={{ flex: '0 0 100px' }}>
-                          <span style={{ display: 'inline-block', padding: '3px 9px', fontSize: 12, border: `1px solid ${s.border}`, background: s.bg, color: s.color }}>{pill}</span>
+                          <span style={{ display: 'inline-block', padding: '3px 9px', fontSize: 12, border: `1px solid ${s.border}`, borderRadius: 999, background: s.bg, color: s.color }}>{pill}</span>
                         </span>
                         <span style={{ flex: '0 0 120px', textAlign: 'right', fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 18 }}>{amt(inv.totalAmount)}</span>
                         <span style={{ flex: '0 0 190px', display: 'flex', gap: 10, justifyContent: 'flex-end', alignItems: 'center' }}>
@@ -421,6 +410,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
         fontSize: 14,
         cursor: 'pointer',
         border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-divider)'}`,
+        borderRadius: 'var(--radius-md)',
         background: active ? 'var(--color-accent-100)' : 'transparent',
         color: active ? 'var(--color-accent-800)' : 'var(--color-neutral-700)',
       }}
@@ -433,7 +423,6 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
 function EmptyCard({ message }: { message: string }) {
   return (
     <div className="card blueprint" style={{ position: 'relative', padding: 26, textAlign: 'center' }}>
-      {cornerMarks}
       <p style={{ margin: 0, fontSize: 15, color: 'var(--color-neutral-700)' }}>{message}</p>
     </div>
   )
