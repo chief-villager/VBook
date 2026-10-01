@@ -152,15 +152,6 @@ function buildCashFlow(r: CashFlowStatement): ViewModel {
   }
 }
 
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
-
 export default function Reports() {
   const [showTerms, setShowTerms] = useState(false)
   const { tab } = useParams<{ tab: string }>()
@@ -264,7 +255,6 @@ export default function Reports() {
               className="btn btn-primary blueprint"
               style={{ position: 'relative', opacity: exporting || loading || !view ? 0.6 : 1 }}
             >
-              {cornerMarks}
               {exporting ? 'Preparing…' : 'Export as PDF'}
             </button>
           </div>
@@ -279,15 +269,13 @@ export default function Reports() {
           <>
             {/* Plain-words summary */}
             <section className="card blueprint" style={{ position: 'relative', padding: '24px 26px', opacity: loading ? 0.6 : 1 }}>
-              {cornerMarks}
               <h2 style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 28, lineHeight: 1.15, margin: '0 0 8px 0' }}>{view.summary}</h2>
               <p style={{ margin: 0, fontSize: 15, lineHeight: 1.5, color: 'var(--color-neutral-700)', maxWidth: '68ch' }}>{view.sub}</p>
               {showTerms && <p style={{ margin: '10px 0 0 0', fontSize: 13, color: 'var(--color-neutral-500)' }}>{meta.term}</p>}
             </section>
 
             {/* Statement table */}
-            <div className="card blueprint" style={{ position: 'relative', padding: 0, opacity: loading ? 0.6 : 1 }}>
-              {cornerMarks}
+            <div className="card blueprint flush" style={{ position: 'relative', padding: 0, opacity: loading ? 0.6 : 1 }}>
               <div style={{ overflowX: 'auto' }}>
                 <div style={{ display: 'flex', flexWrap: 'nowrap', gap: 16, padding: '12px 24px', borderBottom: '1px solid var(--color-divider)', fontSize: 11.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-neutral-600)', minWidth: 560 }}>
                   <span style={{ flex: '1 1 220px', minWidth: 0 }}>Line</span>
@@ -346,8 +334,7 @@ export default function Reports() {
 // A blueprint-framed date field with a small uppercase label above the picker.
 function DateBox({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }): ReactNode {
   return (
-    <label className="blueprint" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 3, padding: '7px 11px', border: '1px solid var(--color-divider)', background: 'transparent' }}>
-      {cornerMarks}
+    <label className="blueprint" style={{ position: 'relative', display: 'flex', flexDirection: 'column', gap: 3, padding: '7px 11px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-md)', background: 'transparent' }}>
       <span style={{ fontSize: 10.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-neutral-600)' }}>{label}</span>
       <input type="date" value={value} onChange={(e) => onChange(e.target.value)} style={dateInput} />
     </label>
@@ -357,7 +344,6 @@ function DateBox({ label, value, onChange }: { label: string; value: string; onC
 function EmptyCard({ message }: { message: string }) {
   return (
     <div className="card blueprint" style={{ position: 'relative', padding: 26, textAlign: 'center' }}>
-      {cornerMarks}
       <p style={{ margin: 0, fontSize: 15, color: 'var(--color-neutral-700)' }}>{message}</p>
     </div>
   )

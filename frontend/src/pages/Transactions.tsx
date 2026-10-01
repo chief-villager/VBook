@@ -9,7 +9,7 @@
 //   "Find a transaction" — the recorded-transactions list over a date range
 //     (GET .../transactions?from&to), paged, with running money-in/out/net totals.
 //
-// Visuals come from src/styles/industry.css (blueprint cards, corner marks, tokens).
+// Visuals come from src/styles/industry.css (blueprint cards, tokens).
 
 import { useEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react'
 import AppShell from '../components/AppShell.tsx'
@@ -80,15 +80,6 @@ function defaultRange() {
     to: toDateParam(now),
   }
 }
-
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
 
 type Tab = 'categorise' | 'find'
 
@@ -287,6 +278,7 @@ export default function Transactions() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     border: '1px solid var(--color-divider)',
+                    borderRadius: 'var(--radius-lg)',
                     padding: '12px 18px',
                   }}
                 >
@@ -323,8 +315,7 @@ export default function Transactions() {
 
                   {actionError && <ErrorLine message={actionError} />}
 
-                  <div className="card blueprint" style={{ position: 'relative', padding: 0 }}>
-                    {cornerMarks}
+                  <div className="card blueprint flush" style={{ position: 'relative', padding: 0 }}>
                     <div style={{ overflowX: 'auto' }}>
                       <TableHead columns={['Date', 'Description', 'Category', 'Amount', 'Approve']} />
                       {queue.map((t) => {
@@ -369,7 +360,6 @@ export default function Transactions() {
             ) : (
               /* Nothing staged — pull from the bank. */
               <section className="card blueprint" style={{ position: 'relative', padding: '40px 34px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16, textAlign: 'center' }}>
-                {cornerMarks}
                 <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent)" strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round">
                   <path d="M3 21h18" />
                   <path d="M5 21V10l7-5 7 5v11" />
@@ -381,7 +371,6 @@ export default function Transactions() {
                   still need a category.
                 </p>
                 <button onClick={pull} disabled={pulling} className="btn btn-primary blueprint" style={{ position: 'relative', marginTop: 6, padding: '14px 26px', fontSize: 16, opacity: pulling ? 0.6 : 1 }}>
-                  {cornerMarks}
                   {pulling ? 'Pulling transactions…' : 'Pull transactions from bank'}
                 </button>
                 <span style={{ fontSize: 12.5, color: 'var(--color-neutral-600)' }}>
@@ -442,7 +431,7 @@ export default function Transactions() {
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 26, padding: '14px 20px', border: '1px solid var(--color-divider)' }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 26, padding: '14px 20px', border: '1px solid var(--color-divider)', borderRadius: 'var(--radius-lg)' }}>
               <MiniTotal label="Money in" value={money(findIn)} accent />
               <MiniTotal label="Money out" value={money(findOut)} />
               <MiniTotal label="Left over" value={signed(findIn - findOut)} accent />
@@ -454,8 +443,7 @@ export default function Transactions() {
               <EmptyCard message="Loading your transactions…" />
             ) : items.length > 0 ? (
               <>
-                <div className="card blueprint" style={{ position: 'relative', padding: 0, opacity: txLoading ? 0.6 : 1 }}>
-                  {cornerMarks}
+                <div className="card blueprint flush" style={{ position: 'relative', padding: 0, opacity: txLoading ? 0.6 : 1 }}>
                   <div style={{ overflowX: 'auto' }}>
                     <TableHead columns={['Date', 'Category', 'Type', 'Amount']} />
                     {items.map((t) => {
@@ -512,7 +500,6 @@ export default function Transactions() {
 function SummaryCard({ label, value, accent }: { label: ReactNode; value: string; accent?: boolean }) {
   return (
     <div className="card blueprint" style={{ position: 'relative', padding: '18px 20px' }}>
-      {cornerMarks}
       <div style={{ fontSize: 11.5, letterSpacing: '0.12em', textTransform: 'uppercase', color: 'var(--color-neutral-600)', marginBottom: 7 }}>
         {label}
       </div>
@@ -533,6 +520,7 @@ function TabButton({ label, active, onClick }: { label: string; active: boolean;
         fontSize: 14,
         cursor: 'pointer',
         border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-divider)'}`,
+        borderRadius: 'var(--radius-md)',
         background: active ? 'var(--color-accent-100)' : 'transparent',
         color: active ? 'var(--color-accent-800)' : 'var(--color-neutral-700)',
       }}
@@ -608,7 +596,6 @@ function MiniTotal({ label, value, accent }: { label: string; value: string; acc
 function EmptyCard({ message }: { message: string }) {
   return (
     <div className="card blueprint" style={{ position: 'relative', padding: 26, textAlign: 'center' }}>
-      {cornerMarks}
       <p style={{ margin: 0, fontSize: 15, color: 'var(--color-neutral-700)' }}>{message}</p>
     </div>
   )
@@ -670,6 +657,7 @@ const approveBtn: CSSProperties = {
   color: '#ffffff',
   background: '#b3261e',
   border: '1px solid #b3261e',
+  borderRadius: 'var(--radius-md)',
   cursor: 'pointer',
   whiteSpace: 'nowrap',
 }

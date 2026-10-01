@@ -2,7 +2,7 @@
 // A two-step flow: setup -> done. The single "setup" step collects the account
 // (name, email, phone, password) and the business (name, type, sector, RC) on one
 // form. Visuals come from the design system in src/styles/industry.css (blueprint
-// cards, corner marks, tokens).
+// cards, tokens).
 //
 // Inputs are controlled and "Create my account" POSTs them to the Identity
 // combined-signup endpoint (owner + business in one transaction). It then tries to
@@ -32,15 +32,6 @@ const DONE_ITEMS = [
   'Your business details are saved and will appear on invoices',
   'Every month you keep clean books moves you closer to loan-ready',
 ]
-
-const cornerMarks = (
-  <>
-    <i className="corner tl" />
-    <i className="corner tr" />
-    <i className="corner bl" />
-    <i className="corner br" />
-  </>
-)
 
 export default function Onboarding() {
   const navigate = useNavigate()
@@ -157,7 +148,7 @@ export default function Onboarding() {
             const accentIfReached = done || active ? 'var(--color-accent)' : 'var(--color-neutral-300)'
             return (
               <div key={l.id} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <div style={{ height: 3, background: accentIfReached }} />
+                <div style={{ height: 3, borderRadius: 999, background: accentIfReached }} />
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                   <span
                     style={{
@@ -169,6 +160,7 @@ export default function Onboarding() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       border: `1px solid ${done || active ? 'var(--color-accent)' : 'var(--color-neutral-400)'}`,
+                      borderRadius: '50%',
                       color: done || active ? 'var(--color-accent-800)' : 'var(--color-neutral-600)',
                     }}
                   >
@@ -197,7 +189,6 @@ export default function Onboarding() {
           className="card blueprint"
           style={{ position: 'relative', width: '100%', maxWidth: 620, padding: '38px 40px 34px 40px' }}
         >
-          {cornerMarks}
 
           {step === 'setup' && (
             <div>
@@ -245,6 +236,7 @@ export default function Onboarding() {
                             fontSize: 14,
                             cursor: 'pointer',
                             border: `1px solid ${on ? 'var(--color-accent)' : 'var(--color-divider)'}`,
+                            borderRadius: 'var(--radius-md)',
                             background: on ? 'var(--color-accent-100)' : 'transparent',
                             color: on ? 'var(--color-accent-800)' : 'var(--color-text)',
                           }}
@@ -303,7 +295,6 @@ export default function Onboarding() {
                 className="btn btn-primary btn-block blueprint"
                 style={{ position: 'relative', opacity: submitting ? 0.7 : 1 }}
               >
-                {cornerMarks}
                 {submitting ? 'Creating your account…' : 'Create my account'}
               </button>
               <p style={{ margin: '14px 0 0 0', fontSize: 12.5, color: 'var(--color-neutral-600)', textAlign: 'center' }}>
@@ -329,6 +320,7 @@ export default function Onboarding() {
                   height: 62,
                   margin: '0 auto 22px auto',
                   border: '1px solid var(--color-accent)',
+                  borderRadius: '50%',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -373,7 +365,6 @@ export default function Onboarding() {
                 className="btn btn-primary btn-block blueprint"
                 style={{ position: 'relative', marginTop: signedIn ? 0 : 8 }}
               >
-                {cornerMarks}
                 {signedIn ? 'Go to my dashboard' : 'Go to sign in'}
               </button>
               <div style={{ display: 'flex', justifyContent: 'center', marginTop: 12 }}>
