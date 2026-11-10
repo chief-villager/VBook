@@ -1,9 +1,11 @@
+using Bookkeeping.Api.RateLimiting;
 using Bookkeeping.Application.Identity;
 using Bookkeeping.Domain;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Identity;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using System.Security.Claims;
 
 namespace Bookkeeping.Api.Controllers;
@@ -48,6 +50,7 @@ public sealed class IdentityController(IIdentityService identity, IAuthService a
     }
 
     [AllowAnonymous]
+    [EnableRateLimiting(RateLimitingExtensions.LoginPolicy)]
     [HttpPost("api/auth/login")]
     public async Task<IActionResult> Login(LoginRequest body, CancellationToken ct)
     {
