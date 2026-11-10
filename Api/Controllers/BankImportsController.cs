@@ -1,3 +1,4 @@
+using Bookkeeping.Api.RateLimiting;
 using Bookkeeping.Application.Common;
 using Bookkeeping.Application.Transactions;
 using Bookkeeping.Domain;
@@ -5,6 +6,7 @@ using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Transactions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Bookkeeping.Api.Controllers;
 
@@ -17,6 +19,7 @@ public sealed class BankImportsController(IBankImportService imports) : Controll
     public sealed record PullRequest(string ExternalAccountId, DateOnly From, DateOnly To);
     public sealed record CategoriseRequest(Guid CategoryId);
 
+    [EnableRateLimiting(RateLimitingExtensions.TransactionPolicy)]
     [Authorize(Policy = Permissions.BankImports.Manage)]
     [HttpPost]
     public async Task<IActionResult> Pull(Guid businessId, PullRequest body, CancellationToken ct)

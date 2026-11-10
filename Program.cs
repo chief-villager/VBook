@@ -1,4 +1,5 @@
 using System.Text;
+using Bookkeeping.Api.RateLimiting;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Invoices;
 using Bookkeeping.Infrastructure.Auth;
@@ -9,6 +10,7 @@ using Bookkeeping.Infrastructure.Persistence.Configurations;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
@@ -99,6 +101,7 @@ builder.Services.AddCors(options =>
             .AllowAnyMethod();
     });
 });
+builder.Services.AddRateLimiting();
 
 var app = builder.Build();
 
@@ -127,6 +130,7 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 app.MapControllers();
 
 app.Run();
