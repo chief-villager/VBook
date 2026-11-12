@@ -9,6 +9,7 @@
 import { useState, type CSSProperties, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { logout } from '../lib/identity'
+import ChatWidget from './ChatWidget.tsx'
 
 export type Section = 'dashboard' | 'transactions' | 'invoices' | 'ledger' | 'reports' | 'credit' | 'settings'
 
@@ -330,6 +331,8 @@ export default function AppShell({
 
         {children}
       </main>
+
+      <ChatWidget />
     </div>
   )
 }

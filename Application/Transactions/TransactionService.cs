@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Bookkeeping.Application.Common;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Transactions;
@@ -49,6 +50,7 @@ public sealed class TransactionService : ITransactionService
         return Result.Success();
     }
 
+    [Description("Returns a full list of transactions for the given business and period, newest first. Always call this when you need the complete set of transactions for a period, e.g. for credit scoring. or to make a decision about a transaction.")]
     public async Task<IReadOnlyList<TransactionSummary>> ListAsync(BusinessId businessId, DateRange period, CancellationToken ct = default)
     {
         var transactions = await _repository.ListAsync(businessId, period, ct);
