@@ -22,6 +22,8 @@
     <PackageReference Include="Mono.Net.Sdk" Version="1.0.1" />
     <PackageReference Include="QuestPDF" Version="2026.7.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
+    <PackageReference Include="OllamaSharp" Version="5.5.0" />
+    <PackageReference Include="Microsoft.Extensions.AI" Version="10.11.0" />
   </ItemGroup>
 
 </Project>

@@ -1,8 +1,10 @@
 using System.Text;
 using Bookkeeping.Api.RateLimiting;
+using Bookkeeping.Application.ChatBot;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Invoices;
 using Bookkeeping.Infrastructure.Auth;
+using Bookkeeping.Infrastructure.ChatBot;
 using Bookkeeping.Infrastructure.DependencyInjection;
 using Bookkeeping.Infrastructure.Documents;
 using Bookkeeping.Infrastructure.Persistence;
@@ -12,8 +14,10 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.AI;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
+using OllamaSharp;
 using QuestPDF.Infrastructure;
 
 // QuestPDF is free under the Community license for this use.
@@ -102,6 +106,9 @@ builder.Services.AddCors(options =>
     });
 });
 builder.Services.AddRateLimiting();
+builder.Services.AddChatClient(new OllamaApiClient(new Uri("http://localhost:11434/"), "qwen2.5:3b"))
+    .UseFunctionInvocation();
+builder.Services.AddScoped<IChatBotService, ChatBotService>();
 
 var app = builder.Build();
 

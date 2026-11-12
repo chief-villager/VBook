@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Bookkeeping.Application.Ledger;
 using Bookkeeping.Domain.Common;
 using Bookkeeping.Domain.Ledger;
@@ -12,6 +13,7 @@ public sealed class FinancialReportingService : IFinancialReportingService
 
     public FinancialReportingService(ILedgerService ledger) => _ledger = ledger;
 
+    [Description("Returns the profit and loss statement for the given business and period. Always call this when you need to understand the profitability of the business.")]
     public async Task<ProfitAndLoss> ProfitAndLossAsync(BusinessId businessId, DateRange period, CancellationToken ct = default)
     {
         var activity = await _ledger.GetPeriodActivityAsync(businessId, period, ct);
@@ -36,6 +38,7 @@ public sealed class FinancialReportingService : IFinancialReportingService
             totalRevenue, totalExpenses, totalRevenue - totalExpenses);
     }
 
+    [Description("Returns the balance sheet for the given business and date. Always call this when you need to understand the financial position of the business.")]
     public async Task<BalanceSheet> BalanceSheetAsync(BusinessId businessId, DateOnly asOf, CancellationToken ct = default)
     {
         var balances = await _ledger.GetCumulativeBalancesAsync(businessId, asOf, ct);
@@ -63,6 +66,7 @@ public sealed class FinancialReportingService : IFinancialReportingService
             assets.Sum(i => i.Amount), liabilities.Sum(i => i.Amount), equity.Sum(i => i.Amount));
     }
 
+    [Description("Returns the cash flow statement for the given business and period. Always call this when you need to understand the cash flow  of the business.")]
     public async Task<CashFlowStatement> CashFlowAsync(BusinessId businessId, DateRange period, CancellationToken ct = default)
     {
         // Simplified: net movement on the cash account across the period.
@@ -70,7 +74,6 @@ public sealed class FinancialReportingService : IFinancialReportingService
         var closing = await CashBalanceAsync(businessId, period.End, ct);
         return new CashFlowStatement(businessId, period, opening, closing, closing - opening);
     }
-
     private async Task<decimal> CashBalanceAsync(BusinessId businessId, DateOnly asOf, CancellationToken ct)
     {
         var balances = await _ledger.GetCumulativeBalancesAsync(businessId, asOf, ct);
